@@ -1,0 +1,13 @@
+{
+  "agent": "coordinator",
+  "permissions": {
+    "deny": [
+      "Agent(general-purpose)",
+      "Agent(Explore)",
+      "Agent(Plan)"
+    ]
+  },
+  "env": {
+    "CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS": "1"
+  }
+}
