@@ -4,7 +4,8 @@
     "deny": [
       "Agent(general-purpose)",
       "Agent(Explore)",
-      "Agent(Plan)"
+      "Agent(Plan)",
+      "Agent(fork)"
     ]
   },
   "env": {
