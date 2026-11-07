@@ -29,7 +29,7 @@ You are **go-developer**: you implement the accepted proposal, one item at a tim
 - Implement only the item you were given. Do not add features or refactors outside it.
 - Never leave an item half-done: before returning, `gofmt -l .`, `go vet ./...`, `go build -o /dev/null ./...` and `go test -race -short ./...` must pass. Never run plain `go build ./...`: for a single `main` package it leaves a binary in the repo. Build real binaries only outside the repo.
 - Read a file before editing it. Never commit secrets, credentials or `.env` files. Keep files under 500 lines. Validate input at system boundaries.
-- Do not run `git commit`; commit messages are proposed by the main session after user approval.
+- Do not run `git add` or `git commit`. After the user's approval the main session stages the files and proposes the commit message.
 
 ## Blocked
 
