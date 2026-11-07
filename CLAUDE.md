@@ -26,7 +26,7 @@ Subagents cannot talk to the user or spawn other subagents, so the main session 
    - If `qa-validator` returns `REJECTED`, the error goes back to `go-developer` to fix, and the item is validated again.
 5. When `go-developer` finishes the last item, `qa-validator` runs the end-to-end test. If it fails, the error goes back to `go-developer`.
 6. With the end-to-end result `APPROVED`, the main session asks the user for approval.
-7. If the user approves, a commit message is proposed. Nothing is committed unless the user asks.
+7. If the user approves, the main session stages the files the task created or changed (`git add` with explicit paths, never `git add -A`, `.` or `-u`, and never files that were already modified before the task started), shows `git status --short`, and proposes a commit message. Nothing is committed unless the user asks.
 
 ## Only these agents
 
