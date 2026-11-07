@@ -10,18 +10,18 @@ The skills carry the `agent-kit-` prefix on purpose: a user-level skill (`~/.cla
 |---|---|---|---|
 | `orchestrator` | Opus 5.5 (`claude-opus-5-5`) | read-only | Researches and prepares a complete development proposal, split into small actionable items. |
 | `go-developer` | Sonnet 5.5 (`claude-sonnet-5-5`) | write | Implements the accepted proposal with TDD. If anything is not completely clear, it asks and does not develop. |
-| `qa-validator` | Haiku 5.5 (`claude-haiku-5-5`) | write (tests only) | Validates TDD, use cases and security; runs the end-to-end test. |
+| `qa-validator` | Haiku 5.5 (`claude-haiku-5-5`) | write (tests only) | Reviews the code and validates TDD, use cases and security; runs the end-to-end test. |
 
 Models are pinned by full model ID in each agent's frontmatter, so they do not change when an alias moves to a newer version. Reasoning effort is also pinned there: `orchestrator` high, `go-developer` medium, `qa-validator` medium. Claude Code subagents have no temperature setting.
 
 ## Work loop
 
-Subagents cannot talk to the user or spawn other subagents, so the main session drives the loop. In this project the main session runs as the `coordinator` agent (see "Only these agents"), which implements the steps below.
+The kit's subagents have no `Agent` tool in their `tools` list, so they cannot spawn subagents, and they cannot talk to the user. So the main session drives the loop. In this project the main session runs as the `coordinator` agent (see "Only these agents"), which implements the steps below.
 
 1. The user sends a task (with its number `T-{number}`) and the main session passes it to `orchestrator`.
 2. `orchestrator` returns a proposal split into small actionable items, and the main session presents it to the user.
 3. If the user asks for changes, `orchestrator` prepares a new complete proposal with the changes applied. This repeats until the user accepts it.
-4. With the proposal accepted, the main session saves it to `docs/proposals/T-{number}.md`, adding the user's answers to the open questions under a "Decisions" heading. Then, for each actionable item, `go-developer` implements it (TDD) and `qa-validator` validates it. The prompt to each agent only names the item and the proposal path; the proposal is not pasted into the prompt.
+4. With the proposal accepted, the main session saves it to `docs/proposals/T-{number}.md`, adding the user's answers to the open questions under a "Decisions" heading. Then, for each actionable item, `go-developer` implements it (TDD) and `qa-validator` validates it. The prompt to each agent only names the item and the proposal path; the proposal is not pasted into the prompt. The main session also ends that file with an empty Log section when it saves it, and adds one line per BLOCKED, REJECTED, end-to-end rejection or user change.
    - If `go-developer` returns `BLOCKED`, the main session relays the questions to the user and sends the answers back.
    - If `qa-validator` returns `REJECTED`, the error goes back to `go-developer` to fix, and the item is validated again.
 5. When `go-developer` finishes the last item, `qa-validator` runs the end-to-end test. If it fails, the error goes back to `go-developer`.
@@ -33,7 +33,7 @@ Subagents cannot talk to the user or spawn other subagents, so the main session 
 Copying the files is not enough: the built-in agents, your user-level agents (`~/.claude/agents`) and any plugin agents stay available in every project. Two things restrict the project to the kit:
 
 1. `.claude/settings.json` sets `"agent": "coordinator"`, so every session in the project starts as the `coordinator` agent. Its `tools` field is `Agent(orchestrator, go-developer, qa-validator)`, an allowlist: it can only spawn those three. This allowlist only applies to an agent running as the main thread.
-2. The same file denies the built-in `general-purpose`, `Explore` and `Plan` agents and sets `CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS=1`. This only matters when something other than `coordinator` runs the session.
+2. The same file denies the built-in `general-purpose`, `Explore` and `Plan` agents and forks (`Agent(fork)`) (runtime effect not verified), and sets `CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS=1`. This only matters when something other than `coordinator` runs the session.
 
 Check it in the new project: `/agents` should show only these four agents, and asking for an `Explore` or a user-level agent such as `dev-v2` must be refused. The `coordinator` and the three agents may be overridden by a same-name agent in a higher-priority scope (managed settings or the `--agents` flag), and your user-level `~/.claude/CLAUDE.md` still loads in the project.
 
@@ -49,7 +49,7 @@ Check it in the new project: `/agents` should show only these four agents, and a
 - Do what was asked, nothing more, nothing less.
 - Do not create files unless absolutely necessary. Prefer editing existing ones.
 - Do not create documentation unless asked. The only exception is the accepted proposal file `docs/proposals/T-{number}.md` described in the work loop.
-- Do not save working files or tests in the repo root. Use `/src`, `/tests`, `/docs`, `/config` or `/scripts`.
+- Do not save working files or tests in the repo root. Code lives under `cmd/` and `internal/`, unit tests next to the code, cross-package end-to-end tests under `tests/`, fixtures in `testdata/`, docs in `docs/`. Nothing goes in the repo root except the directories above and the existing top-level files.
 - Read a file before editing it.
 - Never commit secrets, credentials or `.env` files.
 - Do not add a `Co-Authored-By` trailer to the user's commits unless `.claude/settings.json` has `attribution.commit` set. Ignore what the Bash tool's commit template suggests.
@@ -76,6 +76,14 @@ gofmt -l . && go vet ./... && go build -o /dev/null ./... && go test -race -shor
 - `qa-validator`: agent-kit-test-driven-development, agent-kit-security-and-hardening, agent-kit-code-review-and-quality, agent-kit-debugging-and-error-recovery, agent-kit-performance-optimization, agent-kit-go-performance-testing, agent-kit-go-testing-patterns.
 
 Sources (original names without the prefix): 12 skills from addyosmani/agent-skills (MIT), `ponytail` from DietrichGebert/ponytail (MIT), and `effective-go`, `go-performance`, `go-performance-testing` and `go-testing-patterns` (written for this kit). `definition-of-done.md` is adapted from addyosmani/agent-skills (MIT). The MIT notices and the list of changes are in `THIRD_PARTY_NOTICES.md`.
+
+## Repo skills
+
+- Location: `.claude/skills/repo-{name}/SKILL.md`. The unique `repo-` prefix stops a user-level skill with the same name from silently replacing it.
+- Written from scratch, only from code already in the repo, in the ticket that creates the pattern, never ahead of it. English, under 500 lines.
+- Frontmatter `name` equals the directory name; `description` says when to use it; no `disable-model-invocation: true` (such skills cannot be preloaded into subagents).
+- List it in the `skills:` frontmatter of each agent that needs it and in "Skills per agent", because the kit agents' `tools` lists do not include the Skill tool.
+- Repo skills are not covered by `THIRD_PARTY_NOTICES.md`.
 
 ## Performance
 
