@@ -1,0 +1,23 @@
+Open Food Facts data in testdata/products.tsv
+
+Contains information from Open Food Facts, which is made available under the
+Open Database License (ODbL) 1.0.
+
+(c) Open Food Facts contributors
+
+Source:    https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz
+Retrieved: 2026-11-11
+
+testdata/products.tsv is a derived database: a few rows of the export,
+trimmed to the columns code, product_name, brands, categories_tags,
+countries_tags, nutriscore_grade and quantity, plus a url column rebuilt
+from the code. It also holds three synthetic rows (codes 9990000000001,
+9990000000002 and an empty one) that are not Open Food Facts data.
+
+Licences:
+  ODbL 1.0 (database):         https://opendatacommons.org/licenses/odbl/1-0/
+  Database Contents License:   https://opendatacommons.org/licenses/dbcl/1-0/
+  Open Food Facts terms:       https://world.openfoodfacts.org/terms-of-use
+
+This notice is separate from the licence of the project code and applies
+only to the files in testdata/.
