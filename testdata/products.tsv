@@ -1,0 +1,16 @@
+url	nutriscore_grade	brands	code	quantity	categories_tags	product_name	countries_tags
+https://world.openfoodfacts.org/product/0046872021545	a	Family	0046872021545	65 g	en:undefined	Smoked Mussels In Cottonseed Oil	en:united-states
+https://example.invalid/p/1	c	Synthetic Brand	9990000000001	1 kg	en:snacks	"Lone quote product	en:united-states
+https://world.openfoodfacts.org/product/0862418000269	b	Rawpothecary Inc.	0862418000269		en:beverages	Rawpothecary, Probiotic Water	en:united-states
+https://world.openfoodfacts.org/product/0026395783168	c	Lodc Inc.	0026395783168		en:plant-based-foods-and-beverages,en:beverages,en:plant-based-beverages	Organic aloe water beverage	en:united-states
+https://world.openfoodfacts.org/product/0041757001803	d	Bel Brands Usa	0041757001803		en:dairies,en:fermented-foods,en:fermented-milk-products,en:cheeses	Light snack cheese count	en:united-states
+https://world.openfoodfacts.org/product/0099482439903	e	365 Everyday Value	0099482439903		en:dairies,en:milks	Whole milk	en:united-states
+https://world.openfoodfacts.org/product/0011822442411	d	Big Win,  Rite Aid Corporation	0011822442411	40 g	en:undefined	Apricots	en:united-states
+https://example.invalid/p/2	b	Synthetic Brand	9990000000002	1 kg	en:snacks	Short row product
+https://world.openfoodfacts.org/product/0028400017824	unknown	Frito-Lay Company	0028400017824			Onion flavored rings	en:united-states
+https://world.openfoodfacts.org/product/0748927023008	not-applicable	Optimum Nutrition	0748927023008	2.73 kg	en:dietary-supplements,en:bodybuilding-supplements	Serious Mass	en:france
+https://example.invalid/p/3	a	Synthetic Brand		1 kg	en:snacks	No code product	en:united-states
+https://world.openfoodfacts.org/product/0055742502008	unknown	Compliments	0055742502008	170g		Thon pâle émietté	en:canada
+https://world.openfoodfacts.org/product/00895743	b	Marks & Spencer	00895743		en:meals,en:soups,en:refrigerated-foods,en:microwave-meals,en:minestrone-soups,en:refrigerated-meals,en:refrigerated-soups,fr:minestrones	Minestrone Soup With Bacon	en:france
+https://world.openfoodfacts.org/product/0016000502642	d	Nature Valley	0016000502642	42 g	en:snacks,en:sweet-snacks,en:bars,en:cereal-bars	Nature Valley Crunchy Oats 'n Honey	en:france,en:germany,en:switzerland,en:united-kingdom
+https://world.openfoodfacts.org/product/0060822800028	a	The Hain Celestial Group  Inc., Yves Veggie Cuisine	0060822800028		fr:sans-viande-hache	Mexican Veggie Ground Round	en:united-states,en:world

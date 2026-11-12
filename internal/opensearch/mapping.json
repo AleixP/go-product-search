@@ -1,0 +1,61 @@
+{
+  "settings": {
+    "index": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "refresh_interval": "-1"
+    },
+    "analysis": {
+      "filter": {
+        "autocomplete_edge": {
+          "type": "edge_ngram",
+          "min_gram": 2,
+          "max_gram": 15
+        }
+      },
+      "analyzer": {
+        "folded": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "asciifolding"]
+        },
+        "autocomplete": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "asciifolding", "autocomplete_edge"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "dynamic": "strict",
+    "properties": {
+      "name": {
+        "type": "text",
+        "analyzer": "folded",
+        "fields": {
+          "autocomplete": {
+            "type": "text",
+            "analyzer": "autocomplete",
+            "search_analyzer": "folded"
+          }
+        }
+      },
+      "brands": {
+        "type": "keyword",
+        "ignore_above": 256,
+        "fields": {
+          "text": {"type": "text", "analyzer": "folded"}
+        }
+      },
+      "categories": {
+        "type": "keyword",
+        "ignore_above": 256,
+        "fields": {
+          "text": {"type": "text", "analyzer": "folded"}
+        }
+      },
+      "nutriscore": {"type": "keyword"}
+    }
+  }
+}
