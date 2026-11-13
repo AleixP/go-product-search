@@ -1,4 +1,5 @@
-// Package opensearch is the OpenSearch adapter of the catalog.Indexer port.
+// Package opensearch is the OpenSearch adapter of the catalog.Indexer and
+// catalog.Searcher ports.
 package opensearch
 
 import (
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net"
 	"net/http"
 	"net/url"
 	"slices"
@@ -32,6 +34,35 @@ const (
 	// pingTimeout bounds New so an unreachable cluster fails fast.
 	pingTimeout = 10 * time.Second
 )
+
+// maxIdleConnsPerHost is the idle connections the client keeps to the cluster.
+// The net/http default is 2: at 50 concurrent clients the connections churned
+// and 4-6% of searches failed with EOF (QA, OpenSearch 2.19.7); with 64 there
+// were 0 errors in 34,098 requests and p95 fell from 101 ms to 39 ms.
+const maxIdleConnsPerHost = 64
+
+// newTransport returns the client's own transport: a clone of
+// http.DefaultTransport (so proxy, dialer and timeouts keep the standard
+// values) with a larger idle pool. The shared default is never modified.
+func newTransport() *http.Transport {
+	var tr *http.Transport
+	if def, ok := http.DefaultTransport.(*http.Transport); ok {
+		tr = def.Clone()
+	} else {
+		tr = &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		}
+	}
+	tr.MaxIdleConnsPerHost = maxIdleConnsPerHost
+	tr.MaxIdleConns = max(tr.MaxIdleConns, maxIdleConnsPerHost)
+	return tr
+}
 
 // newAPIClient builds the API client; tests replace it to force a failure.
 var newAPIClient = opensearchapi.NewClient
@@ -57,7 +88,7 @@ func New(ctx context.Context, addr string) (*Client, error) {
 	if u.User != nil {
 		return nil, errors.New("invalid OpenSearch address: credentials in the URL are not supported")
 	}
-	api, err := newAPIClient(opensearchapi.Config{Client: osclient.Config{Addresses: []string{addr}}})
+	api, err := newAPIClient(opensearchapi.Config{Client: osclient.Config{Addresses: []string{addr}, Transport: newTransport()}})
 	if err != nil {
 		// Static message plus scheme://host only: addr may carry a path or query with secrets.
 		slog.Warn("create OpenSearch client failed", "address", redact(addr))
