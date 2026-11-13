@@ -1,0 +1,8 @@
+{
+  "from": 100,
+  "size": 50,
+  "track_total_hits": true,
+  "query": {
+    "match_all": {}
+  }
+}
