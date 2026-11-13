@@ -142,6 +142,7 @@ func TestAdapterErrorsNeverCarryTheRequestURL(t *testing.T) {
 			f.aliased = []string{"products-old"}
 			f.indices = []string{"products-old", newIndex}
 			srv := dropServer(t, f, tt.drop)
+			closeIdle := trackTransport(t)
 			c, err := New(context.Background(), srv.URL)
 			if err != nil {
 				t.Fatal(err)
@@ -150,6 +151,7 @@ func TestAdapterErrorsNeverCarryTheRequestURL(t *testing.T) {
 			var logs bytes.Buffer
 			c.log = slog.New(slog.NewTextHandler(&logs, nil))
 			if tt.closed {
+				closeIdle()
 				srv.Close()
 			}
 			host := mustHost(t, srv.URL)
