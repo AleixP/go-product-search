@@ -24,6 +24,13 @@ func TestBody_Golden(t *testing.T) {
 		{"text_simple.json", catalog.Query{Text: "chocolate", Page: 1, Size: 20}},
 		{"text_escaping.json", catalog.Query{Text: `Crème "brûlée" <b> & \ x`, Page: 1, Size: 20}},
 		{"text_last_window.json", catalog.Query{Text: "tea", Page: 100, Size: 100}},
+		{"filter_brands.json", catalog.Query{Page: 1, Size: 20, Brands: []string{"acme", "bo"}}},
+		{"filter_categories_text.json", catalog.Query{Text: "tea", Page: 1, Size: 20, Categories: []string{"teas"}}},
+		{"filter_nutriscore.json", catalog.Query{Page: 1, Size: 20, Nutriscore: []string{"a", "b"}}},
+		{"filter_all.json", catalog.Query{
+			Text: "chocolate", Page: 2, Size: 20,
+			Brands: []string{"nestle"}, Categories: []string{"snacks", "sweets"}, Nutriscore: []string{"e"},
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.file, func(t *testing.T) {

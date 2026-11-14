@@ -39,13 +39,33 @@ func answer(body string) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, body) }
 }
 
+// noFilterAggs is a valid aggregations block for a query without filters.
+const noFilterAggs = `{"brands":{"doc_count":0,"top":{"buckets":[]}},"categories":{"doc_count":0,"top":{"buckets":[]}},` +
+	`"nutriscore":{"doc_count":0,"grades":{"buckets":[{"doc_count":0},{"doc_count":0},{"doc_count":0},{"doc_count":0},{"doc_count":0}]}}}`
+
+// emptyFacets is what noFilterAggs decodes to.
+var emptyFacets = catalog.Facets{
+	Brands:     []catalog.FacetValue{},
+	Categories: []catalog.FacetValue{},
+	Nutriscore: []catalog.FacetValue{{Value: "a"}, {Value: "b"}, {Value: "c"}, {Value: "d"}, {Value: "e"}},
+}
+
 func searchBody(total, failed int, timedOut bool, hits string) string {
+	return searchBodyWith(total, failed, timedOut, hits, noFilterAggs)
+}
+
+// searchBodyWith is a search response; aggs "" leaves the aggregations out.
+func searchBodyWith(total, failed int, timedOut bool, hits, aggs string) string {
 	to := "false"
 	if timedOut {
 		to = "true"
 	}
-	return `{"took":1,"timed_out":` + to + `,"_shards":{"total":1,"successful":1,"failed":` + strconv.Itoa(failed) + `},` +
-		`"hits":{"total":{"value":` + strconv.Itoa(total) + `,"relation":"eq"},"max_score":1.0,"hits":[` + hits + `]}}`
+	out := `{"took":1,"timed_out":` + to + `,"_shards":{"total":1,"successful":1,"failed":` + strconv.Itoa(failed) + `},` +
+		`"hits":{"total":{"value":` + strconv.Itoa(total) + `,"relation":"eq"},"max_score":1.0,"hits":[` + hits + `]}`
+	if aggs != "" {
+		out += `,"aggregations":` + aggs
+	}
+	return out + `}`
 }
 
 var okQuery = catalog.Query{Text: "tea", Page: 1, Size: 20}
@@ -85,7 +105,7 @@ func TestSearch_DecodesHits(t *testing.T) {
 	want := catalog.Result{Total: 42, Products: []catalog.Product{
 		{ID: "111", Name: "Green tea", Brands: []string{"Acme", "Bo"}, Categories: []string{"teas"}, Nutriscore: "a"},
 		{ID: "222", Name: "Black tea", Brands: []string{"Acme"}, Categories: []string{"teas", "drinks"}},
-	}}
+	}, Facets: emptyFacets}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Search = %+v, want %+v", got, want)
 	}
