@@ -1,0 +1,212 @@
+{
+  "from": 20,
+  "size": 20,
+  "track_total_hits": true,
+  "query": {
+    "multi_match": {
+      "query": "chocolate",
+      "type": "best_fields",
+      "fields": [
+        "name^3",
+        "brands.text^2",
+        "categories.text"
+      ],
+      "operator": "or",
+      "fuzziness": "AUTO",
+      "prefix_length": 1,
+      "max_expansions": 10
+    }
+  },
+  "post_filter": {
+    "bool": {
+      "filter": [
+        {
+          "terms": {
+            "brands.norm": [
+              "nestle"
+            ]
+          }
+        },
+        {
+          "terms": {
+            "categories.norm": [
+              "snacks",
+              "sweets"
+            ]
+          }
+        },
+        {
+          "terms": {
+            "nutriscore": [
+              "e"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "aggs": {
+    "brands": {
+      "filter": {
+        "bool": {
+          "filter": [
+            {
+              "terms": {
+                "categories.norm": [
+                  "snacks",
+                  "sweets"
+                ]
+              }
+            },
+            {
+              "terms": {
+                "nutriscore": [
+                  "e"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "aggs": {
+        "top": {
+          "terms": {
+            "field": "brands.norm",
+            "size": 10,
+            "min_doc_count": 1,
+            "order": [
+              {
+                "_count": "desc"
+              },
+              {
+                "_key": "asc"
+              }
+            ]
+          }
+        },
+        "selected": {
+          "filters": {
+            "filters": [
+              {
+                "term": {
+                  "brands.norm": "nestle"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "categories": {
+      "filter": {
+        "bool": {
+          "filter": [
+            {
+              "terms": {
+                "brands.norm": [
+                  "nestle"
+                ]
+              }
+            },
+            {
+              "terms": {
+                "nutriscore": [
+                  "e"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "aggs": {
+        "top": {
+          "terms": {
+            "field": "categories.norm",
+            "size": 10,
+            "min_doc_count": 1,
+            "order": [
+              {
+                "_count": "desc"
+              },
+              {
+                "_key": "asc"
+              }
+            ]
+          }
+        },
+        "selected": {
+          "filters": {
+            "filters": [
+              {
+                "term": {
+                  "categories.norm": "snacks"
+                }
+              },
+              {
+                "term": {
+                  "categories.norm": "sweets"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "nutriscore": {
+      "filter": {
+        "bool": {
+          "filter": [
+            {
+              "terms": {
+                "brands.norm": [
+                  "nestle"
+                ]
+              }
+            },
+            {
+              "terms": {
+                "categories.norm": [
+                  "snacks",
+                  "sweets"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "aggs": {
+        "grades": {
+          "filters": {
+            "filters": [
+              {
+                "term": {
+                  "nutriscore": "a"
+                }
+              },
+              {
+                "term": {
+                  "nutriscore": "b"
+                }
+              },
+              {
+                "term": {
+                  "nutriscore": "c"
+                }
+              },
+              {
+                "term": {
+                  "nutriscore": "d"
+                }
+              },
+              {
+                "term": {
+                  "nutriscore": "e"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

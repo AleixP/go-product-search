@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -68,7 +69,8 @@ func TestSearch_OKExactBody(t *testing.T) {
 
 	want := `{"total":42,"page":1,"size":20,"items":[` +
 		`{"id":"123","name":"Tea","brands":["Acme","B"],"categories":["drinks"],"nutriscore":"b"},` +
-		`{"id":"456","name":"Milk","brands":[],"categories":["dairy","milk"],"nutriscore":""}]}` + "\n"
+		`{"id":"456","name":"Milk","brands":[],"categories":["dairy","milk"],"nutriscore":""}],` +
+		`"facets":{"brands":[],"categories":[],"nutriscore":[]}}` + "\n"
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -76,7 +78,7 @@ func TestSearch_OKExactBody(t *testing.T) {
 		t.Errorf("body = %q, want %q", rec.Body.String(), want)
 	}
 	assertJSONHeaders(t, rec)
-	if s.got != (catalog.Query{Text: "", Page: 1, Size: 20}) {
+	if !reflect.DeepEqual(s.got, catalog.Query{Text: "", Page: 1, Size: 20}) {
 		t.Errorf("searcher got %+v, want {\"\",1,20}", s.got)
 	}
 }
@@ -87,11 +89,11 @@ func TestSearch_EchoesPageAndSizeAndTrimmedQuery(t *testing.T) {
 
 	rec := do(h, http.MethodGet, "/search?q=+tea+&page=3&size=5")
 
-	want := `{"total":7,"page":3,"size":5,"items":[]}` + "\n"
+	want := `{"total":7,"page":3,"size":5,"items":[],"facets":{"brands":[],"categories":[],"nutriscore":[]}}` + "\n"
 	if rec.Body.String() != want {
 		t.Errorf("body = %q, want %q", rec.Body.String(), want)
 	}
-	if s.got != (catalog.Query{Text: "tea", Page: 3, Size: 5}) {
+	if !reflect.DeepEqual(s.got, catalog.Query{Text: "tea", Page: 3, Size: 5}) {
 		t.Errorf("searcher got %+v, want {tea,3,5}", s.got)
 	}
 }
@@ -101,14 +103,14 @@ func TestSearch_NeverNull(t *testing.T) {
 	h, _ := newTestHandler(s)
 
 	rec := do(h, http.MethodGet, "/search")
-	want := `{"total":1,"page":1,"size":20,"items":[{"id":"1","name":"x","brands":[],"categories":[],"nutriscore":""}]}` + "\n"
+	want := `{"total":1,"page":1,"size":20,"items":[{"id":"1","name":"x","brands":[],"categories":[],"nutriscore":""}],"facets":{"brands":[],"categories":[],"nutriscore":[]}}` + "\n"
 	if rec.Body.String() != want {
 		t.Errorf("nil slices: body = %q, want %q", rec.Body.String(), want)
 	}
 
 	s.result = catalog.Result{} // nil Products
 	rec = do(h, http.MethodGet, "/search")
-	want = `{"total":0,"page":1,"size":20,"items":[]}` + "\n"
+	want = `{"total":0,"page":1,"size":20,"items":[],"facets":{"brands":[],"categories":[],"nutriscore":[]}}` + "\n"
 	if rec.Body.String() != want {
 		t.Errorf("nil products: body = %q, want %q", rec.Body.String(), want)
 	}

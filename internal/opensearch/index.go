@@ -76,6 +76,8 @@ type Client struct {
 	api *opensearchapi.Client
 	now func() time.Time
 	log *slog.Logger
+	// analyzeSlots bounds the _analyze calls in flight (see maxAnalyzeInFlight).
+	analyzeSlots chan struct{}
 }
 
 // New connects to the cluster at addr (an http or https URL) and pings it, so
@@ -99,7 +101,7 @@ func New(ctx context.Context, addr string) (*Client, error) {
 	if resp, err := api.Ping(pctx, nil); err != nil {
 		return nil, fmt.Errorf("ping OpenSearch at %s://%s: %w", u.Scheme, u.Host, withoutRequestURL(resp != nil, err))
 	}
-	return &Client{api: api, now: time.Now, log: slog.Default()}, nil
+	return &Client{api: api, now: time.Now, log: slog.Default(), analyzeSlots: make(chan struct{}, analyzeBound)}, nil
 }
 
 // redact keeps only the scheme and host of a URL for error messages.
