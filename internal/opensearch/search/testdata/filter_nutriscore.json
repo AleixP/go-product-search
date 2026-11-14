@@ -1,0 +1,128 @@
+{
+  "from": 0,
+  "size": 20,
+  "track_total_hits": true,
+  "query": {
+    "match_all": {}
+  },
+  "post_filter": {
+    "bool": {
+      "filter": [
+        {
+          "terms": {
+            "nutriscore": [
+              "a",
+              "b"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "aggs": {
+    "brands": {
+      "filter": {
+        "bool": {
+          "filter": [
+            {
+              "terms": {
+                "nutriscore": [
+                  "a",
+                  "b"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "aggs": {
+        "top": {
+          "terms": {
+            "field": "brands.norm",
+            "size": 10,
+            "min_doc_count": 1,
+            "order": [
+              {
+                "_count": "desc"
+              },
+              {
+                "_key": "asc"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "categories": {
+      "filter": {
+        "bool": {
+          "filter": [
+            {
+              "terms": {
+                "nutriscore": [
+                  "a",
+                  "b"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "aggs": {
+        "top": {
+          "terms": {
+            "field": "categories.norm",
+            "size": 10,
+            "min_doc_count": 1,
+            "order": [
+              {
+                "_count": "desc"
+              },
+              {
+                "_key": "asc"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "nutriscore": {
+      "filter": {
+        "match_all": {}
+      },
+      "aggs": {
+        "grades": {
+          "filters": {
+            "filters": [
+              {
+                "term": {
+                  "nutriscore": "a"
+                }
+              },
+              {
+                "term": {
+                  "nutriscore": "b"
+                }
+              },
+              {
+                "term": {
+                  "nutriscore": "c"
+                }
+              },
+              {
+                "term": {
+                  "nutriscore": "d"
+                }
+              },
+              {
+                "term": {
+                  "nutriscore": "e"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -16,11 +16,19 @@ import (
 
 var _ catalog.Searcher = (*Client)(nil)
 
-// Search runs q against the products alias. The caller owns the deadline.
-// Errors never carry the request URL or a response body: OpenSearch error
-// objects (status, type, reason) are kept, any other unparsable response is
-// reduced to its HTTP status.
+// Search runs q against the products alias. The caller owns the deadline, and
+// it covers every engine call (at most one _analyze call, then the search) and
+// the wait for an _analyze slot. Brands and Categories are canonicalized by
+// the engine first, so the query matches the indexed keys exactly.
+// Errors never carry the request URL or a response body: an OpenSearch error
+// object is reduced to its status and type (its reason can quote a filter
+// value), any other unparsable response to its HTTP status.
 func (c *Client) Search(ctx context.Context, q catalog.Query) (catalog.Result, error) {
+	// q is a copy: normalize returns new slices, so the caller's are untouched.
+	var err error
+	if q.Brands, q.Categories, err = c.normalize(ctx, q.Brands, q.Categories); err != nil {
+		return catalog.Result{}, err
+	}
 	body, err := search.Body(q)
 	if err != nil {
 		return catalog.Result{}, fmt.Errorf("search products: build query: %w", err)
@@ -53,12 +61,20 @@ func (c *Client) Search(ctx context.Context, q catalog.Query) (catalog.Result, e
 			p.Categories = []string{}
 		}
 	}
-	return catalog.Result{Total: resp.Hits.Total.Value, Products: products}, nil
+	facets, err := search.ParseFacets(resp.Aggregations, q)
+	if err != nil {
+		return catalog.Result{}, fmt.Errorf("search products: %w", err)
+	}
+	return catalog.Result{Total: resp.Hits.Total.Value, Products: products, Facets: facets}, nil
 }
 
 // searchError wraps a failed search call without the request URL or any
-// response body text.
+// response body text; an engine error object keeps only status and type.
 func searchError(in opensearchapi.Inspect, err error) error {
+	var structErr *osclient.StructError
+	if errors.As(err, &structErr) {
+		return fmt.Errorf("search products: status %d, type %s", structErr.Status, structErr.Err.Type)
+	}
 	var strErr *osclient.StringError
 	if errors.Is(err, osclient.ErrJSONUnmarshalBody) || errors.Is(err, osclient.ErrUnknownOpensearchError) || errors.As(err, &strErr) {
 		// The API client drops the response when a 2xx body does not decode,

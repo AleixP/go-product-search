@@ -24,6 +24,13 @@
           "tokenizer": "standard",
           "filter": ["lowercase", "asciifolding", "autocomplete_edge"]
         }
+      },
+      "normalizer": {
+        "folded_keyword": {
+          "type": "custom",
+          "char_filter": [],
+          "filter": ["lowercase", "asciifolding"]
+        }
       }
     }
   },
@@ -45,14 +52,16 @@
         "type": "keyword",
         "ignore_above": 256,
         "fields": {
-          "text": {"type": "text", "analyzer": "folded"}
+          "text": {"type": "text", "analyzer": "folded"},
+          "norm": {"type": "keyword", "normalizer": "folded_keyword", "ignore_above": 256}
         }
       },
       "categories": {
         "type": "keyword",
         "ignore_above": 256,
         "fields": {
-          "text": {"type": "text", "analyzer": "folded"}
+          "text": {"type": "text", "analyzer": "folded"},
+          "norm": {"type": "keyword", "normalizer": "folded_keyword", "ignore_above": 256}
         }
       },
       "nutriscore": {"type": "keyword"}

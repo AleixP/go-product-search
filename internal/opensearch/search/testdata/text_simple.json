@@ -16,5 +16,89 @@
       "prefix_length": 1,
       "max_expansions": 10
     }
+  },
+  "aggs": {
+    "brands": {
+      "filter": {
+        "match_all": {}
+      },
+      "aggs": {
+        "top": {
+          "terms": {
+            "field": "brands.norm",
+            "size": 10,
+            "min_doc_count": 1,
+            "order": [
+              {
+                "_count": "desc"
+              },
+              {
+                "_key": "asc"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "categories": {
+      "filter": {
+        "match_all": {}
+      },
+      "aggs": {
+        "top": {
+          "terms": {
+            "field": "categories.norm",
+            "size": 10,
+            "min_doc_count": 1,
+            "order": [
+              {
+                "_count": "desc"
+              },
+              {
+                "_key": "asc"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "nutriscore": {
+      "filter": {
+        "match_all": {}
+      },
+      "aggs": {
+        "grades": {
+          "filters": {
+            "filters": [
+              {
+                "term": {
+                  "nutriscore": "a"
+                }
+              },
+              {
+                "term": {
+                  "nutriscore": "b"
+                }
+              },
+              {
+                "term": {
+                  "nutriscore": "c"
+                }
+              },
+              {
+                "term": {
+                  "nutriscore": "d"
+                }
+              },
+              {
+                "term": {
+                  "nutriscore": "e"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
   }
 }

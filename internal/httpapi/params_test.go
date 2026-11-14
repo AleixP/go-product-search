@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -9,7 +10,8 @@ import (
 
 const (
 	msgMalformed = "malformed query string"
-	msgUnknown   = "unknown parameter; allowed parameters are q, page and size"
+	msgUnknown   = "unknown parameter; allowed parameters are q, page, size, brands, categories and nutriscore"
+	allowedList  = "; allowed parameters are q, page, size, brands, categories and nutriscore"
 	msgUTF8      = "q must be valid UTF-8"
 	msgControl   = "q must not contain control characters"
 	msgQLen      = "q must be at most 100 characters"
@@ -26,6 +28,9 @@ func TestParseSearchParams(t *testing.T) {
 	}
 	q := func(text string, page, size int) catalog.Query {
 		return catalog.Query{Text: text, Page: page, Size: size}
+	}
+	named := func(key string) string {
+		return "parameter \"" + key + "\" is not allowed" + allowedList
 	}
 	e100 := strings.Repeat("é", 100) // 100 runes, each 2 bytes
 	pe := strings.Repeat("%C3%A9", 1)
@@ -58,6 +63,9 @@ func TestParseSearchParams(t *testing.T) {
 		{name: "bare C1 NEL is trimmed away", raw: "q=%C2%85", want: q("", 1, 20)},
 		{name: "line separator inside is not control", raw: "q=a%E2%80%A8b", want: q("a b", 1, 20)},
 		{name: "bare line separator accepted", raw: "q=%E2%80%A8", want: q("", 1, 20)},
+		// Format characters (Cf: BOM, RLO, ZWSP) are not control characters; the
+		// spec rejects control characters only. Rejecting Cf is a user decision.
+		{name: "format character is not control", raw: "q=%EF%BB%BFa", want: q("\uFEFFa", 1, 20)},
 		{name: "control after trim at edge", raw: "q=%01a", wantErr: invalid(msgControl)},
 		{name: "utf-8 checked before trim and length", raw: "q=%FF" + strings.Repeat("a", 200), wantErr: invalid(msgUTF8)},
 		{name: "control checked before length", raw: "q=%00" + strings.Repeat("a", 200), wantErr: invalid(msgControl)},
@@ -106,8 +114,8 @@ func TestParseSearchParams(t *testing.T) {
 		{name: "default size window", raw: "page=501", wantErr: outOfRange("page must be at most 500 when size is 20")},
 
 		// keys
-		{name: "unknown key", raw: "foo=1", wantErr: invalid(msgUnknown)},
-		{name: "keys are case sensitive", raw: "Q=x", wantErr: invalid(msgUnknown)},
+		{name: "unknown key", raw: "foo=1", wantErr: invalid(named("foo"))},
+		{name: "keys are case sensitive", raw: "Q=x", wantErr: invalid(named("Q"))},
 		{name: "q twice", raw: "q=a&q=b", wantErr: invalid("parameter q must appear at most once")},
 		{name: "q twice empty", raw: "q=&q=", wantErr: invalid("parameter q must appear at most once")},
 		{name: "page twice", raw: "page=1&page=1", wantErr: invalid("parameter page must appear at most once")},
@@ -119,12 +127,12 @@ func TestParseSearchParams(t *testing.T) {
 
 		// order
 		{name: "malformed beats unknown", raw: "foo=1&q=%zz", wantErr: invalid(msgMalformed)},
-		{name: "unknown beats size", raw: "foo=1&size=0", wantErr: invalid(msgUnknown)},
+		{name: "unknown beats size", raw: "foo=1&size=0", wantErr: invalid(named("foo"))},
 		{name: "q error beats size", raw: "q=%FF&size=0", wantErr: invalid(msgUTF8)},
 		{name: "q error beats page", raw: "q=%FF&page=0", wantErr: invalid(msgUTF8)},
 		{name: "page error beats size", raw: "size=0&page=0", wantErr: invalid(msgPage)},
 		{name: "size error beats window", raw: "page=99999&size=101", wantErr: invalid(msgSize)},
-		{name: "sorted keys unknown first", raw: "aaa=1&q=a&q=b", wantErr: invalid(msgUnknown)},
+		{name: "sorted keys unknown first", raw: "aaa=1&q=a&q=b", wantErr: invalid(named("aaa"))},
 		{name: "sorted keys repeat first", raw: "q=a&q=b&zzz=1", wantErr: invalid("parameter q must appear at most once")},
 		{name: "sorted keys page before size", raw: "size=1&size=1&page=1&page=1", wantErr: invalid("parameter page must appear at most once")},
 		{name: "repeat beats q content", raw: "q=%FF&q=%FF", wantErr: invalid("parameter q must appear at most once")},
@@ -144,7 +152,7 @@ func TestParseSearchParams(t *testing.T) {
 					}
 					continue
 				}
-				if got != tt.want {
+				if !reflect.DeepEqual(got, tt.want) {
 					t.Fatalf("parseSearchParams(%q) = %+v, want %+v", tt.raw, got, tt.want)
 				}
 			}
@@ -156,7 +164,11 @@ func TestParseSearchParams_ErrorsNeverEchoInput(t *testing.T) {
 	const marker = "zq9marker"
 	for _, raw := range []string{
 		"q=%FF" + marker, "q=" + marker + "%00", "page=" + marker, "size=" + marker,
-		marker + "=1", marker + "=1&" + marker + "=2", "q=" + marker + "%zz", "q=" + marker + ";b",
+		marker + "%3C=1", marker + "%00=1", marker + "%FF=1", marker + "+x=1",
+		strings.Repeat("k", 39) + "=1", "brands=%FF" + marker, "brands=" + marker + "%00",
+		"brands=" + strings.Repeat("a", 248) + marker, "nutriscore=" + marker,
+		strings.Repeat("categories="+marker+"&", 21),
+		"q=" + marker + "%zz", "q=" + marker + ";b",
 		"q=" + marker + "&q=" + marker, "page=" + marker + "&size=1",
 	} {
 		_, err := parseSearchParams(raw)

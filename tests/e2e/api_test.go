@@ -3,6 +3,8 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -33,32 +35,34 @@ const (
 
 var listenRE = regexp.MustCompile(`msg=listening addr=(\S+)`)
 
-// searchBody is what the stub OpenSearch answers to POST /products/_search:
-// two hits and an exact total of 42. The second hit has "brands": null and no
-// "nutriscore", to pin the API's empty-array and empty-string defaults.
-const searchBody = `{"took":1,"timed_out":false,"_shards":{"total":1,"successful":1,"skipped":0,"failed":0},` +
-	`"hits":{"total":{"value":42,"relation":"eq"},"max_score":1.0,"hits":[` +
-	`{"_index":"products-20240101t000000z","_id":"0046872021545","_score":1.0,"_source":{"name":"Smoked Mussels In Cottonseed Oil","brands":["Family"],"categories":["en:undefined"],"nutriscore":"a"}},` +
-	`{"_index":"products-20240101t000000z","_id":"9990000000002","_score":0.5,"_source":{"name":"Green Tea <b>&","brands":null,"categories":["en:beverages","en:teas"]}}` +
-	`]}}`
-
 const wantSearchJSON = `{"total":42,"page":1,"size":2,"items":[` +
 	`{"id":"0046872021545","name":"Smoked Mussels In Cottonseed Oil","brands":["Family"],"categories":["en:undefined"],"nutriscore":"a"},` +
-	`{"id":"9990000000002","name":"Green Tea <b>&","brands":[],"categories":["en:beverages","en:teas"],"nutriscore":""}]}` + "\n"
+	`{"id":"9990000000002","name":"Green Tea <b>&","brands":[],"categories":["en:beverages","en:teas"],"nutriscore":""}],` +
+	`"facets":{"brands":[],"categories":[],"nutriscore":[{"value":"a","count":0},{"value":"b","count":0},{"value":"c","count":0},{"value":"d","count":0},{"value":"e","count":0}]}}` + "\n"
 
 const unavailableJSON = `{"error":{"code":"search_unavailable","message":"search is temporarily unavailable"}}` + "\n"
 
-// stubSearch is a stand-in for the two OpenSearch calls the API makes: the
-// startup ping and the search. Any other request fails the test.
+// analyzeCall is one request the stub saw on the _analyze endpoint.
+type analyzeCall struct {
+	method string
+	body   string
+}
+
+// stubSearch is a stand-in for the OpenSearch calls the API makes: the startup
+// ping, the search and the _analyze normalization. Any other request fails the
+// test.
 type stubSearch struct {
-	srv     *httptest.Server
-	missing atomic.Bool // when set, the search answers 404 index_not_found_exception
+	srv         *httptest.Server
+	missing     atomic.Bool // when set, the search answers 404 index_not_found_exception
+	noAggs      atomic.Bool // when set, the search answers without aggregations
+	analyzeFail atomic.Bool // when set, _analyze answers 400 and quotes the request text
 
 	mu       sync.Mutex
 	lastBody string
 	method   string
 	path     string
 	searches int
+	analyzes []analyzeCall
 }
 
 func newStubSearch(t *testing.T) *stubSearch {
@@ -78,7 +82,17 @@ func newStubSearch(t *testing.T) *stubSearch {
 				writeJSON(w, http.StatusNotFound, `{"error":{"root_cause":[{"type":"index_not_found_exception","reason":"stub-secret-text"}],"type":"index_not_found_exception","reason":"stub-secret-text"},"status":404}`)
 				return
 			}
-			writeJSON(w, http.StatusOK, searchBody)
+			writeJSON(w, http.StatusOK, searchBody(string(body), s.noAggs.Load()))
+		case r.URL.Path == "/"+alias+"/_analyze":
+			s.mu.Lock()
+			s.analyzes = append(s.analyzes, analyzeCall{r.Method, string(body)})
+			s.mu.Unlock()
+			s.analyze(w, body)
+		case r.Method == http.MethodGet && (strings.HasPrefix(r.URL.Path, "/_nodes/_local/stats/") || r.URL.Path == "/_cluster/health"):
+			// opensearch-go polls node stats every 5 s or more, and cluster
+			// health on multi-node pools; both are background noise, not API
+			// behavior, so they must not fail a long-lived API process.
+			writeJSON(w, http.StatusOK, `{"nodes":{}}`)
 		default:
 			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusTeapot)
@@ -88,10 +102,43 @@ func newStubSearch(t *testing.T) *stubSearch {
 	return s
 }
 
+// analyze answers _analyze with one token per text, in order. The fold is only
+// strings.ToLower: the real folded_keyword normalizer also folds accents, but
+// the stub needs a deterministic canonicalization, not the engine's rule.
+func (s *stubSearch) analyze(w http.ResponseWriter, body []byte) {
+	var req struct {
+		Normalizer string   `json:"normalizer"`
+		Text       []string `json:"text"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil || req.Normalizer != "folded_keyword" {
+		writeJSON(w, http.StatusBadRequest, `{"error":{"type":"illegal_argument_exception","reason":"stub: bad analyze request"},"status":400}`)
+		return
+	}
+	if s.analyzeFail.Load() {
+		// Like the real engine, the reason quotes the request text.
+		reason, _ := json.Marshal("cannot normalize " + strings.Join(req.Text, ","))
+		writeJSON(w, http.StatusBadRequest, `{"error":{"root_cause":[{"type":"illegal_argument_exception","reason":`+string(reason)+`}],"type":"illegal_argument_exception","reason":`+string(reason)+`},"status":400}`)
+		return
+	}
+	tokens := make([]string, len(req.Text))
+	for i, text := range req.Text {
+		tk, _ := json.Marshal(strings.ToLower(text))
+		tokens[i] = fmt.Sprintf(`{"token":%s,"start_offset":0,"end_offset":%d,"type":"word","position":%d}`, tk, len(text), i)
+	}
+	writeJSON(w, http.StatusOK, `{"tokens":[`+strings.Join(tokens, ",")+`]}`)
+}
+
 func (s *stubSearch) last() (body, method, path string, searches int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.lastBody, s.method, s.path, s.searches
+}
+
+// analyzed returns a copy of the _analyze requests seen so far.
+func (s *stubSearch) analyzed() []analyzeCall {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]analyzeCall(nil), s.analyzes...)
 }
 
 // buildAPI compiles the real command into dir and returns the binary path.
@@ -371,6 +418,8 @@ func TestAPI_EndToEnd(t *testing.T) {
 			t.Errorf("got %d %q, want 200 and no body", got.status, got.body)
 		}
 	})
+
+	filterSubtests(t, stub, client, base, proc)
 
 	t.Run("SIGINT shuts down gracefully with exit 0", func(t *testing.T) {
 		if err := proc.cmd.Process.Signal(os.Interrupt); err != nil {
