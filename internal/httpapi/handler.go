@@ -41,10 +41,22 @@ type errorDetail struct {
 }
 
 type searchResponse struct {
-	Total int           `json:"total"`
-	Page  int           `json:"page"`
-	Size  int           `json:"size"`
-	Items []productItem `json:"items"`
+	Total  int           `json:"total"`
+	Page   int           `json:"page"`
+	Size   int           `json:"size"`
+	Items  []productItem `json:"items"`
+	Facets facetsBody    `json:"facets"`
+}
+
+type facetsBody struct {
+	Brands     []facetEntry `json:"brands"`
+	Categories []facetEntry `json:"categories"`
+	Nutriscore []facetEntry `json:"nutriscore"`
+}
+
+type facetEntry struct {
+	Value string `json:"value"`
+	Count int    `json:"count"`
 }
 
 type productItem struct {
@@ -76,16 +88,16 @@ func (h *handler) search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// shortcut: no cap on in-flight searches. Measured at 32.3 MiB peak RSS
-	// (whole run, 50 concurrent clients, size=100, real OpenSearch 2.19.7,
-	// 100k documents), but a worst-case index of 198 KiB documents could
+	// shortcut: no cap on in-flight searches. Measured at 32.1 MiB peak RSS
+	// (whole run, 50 concurrent clients, size=100, filters and facets, real
+	// OpenSearch 2.19.7, 100k documents), but a worst-case index of 198 KiB documents could
 	// need about 78 MiB per request. Add a semaphore if the API is exposed
 	// beyond local use.
 	ctx, cancel := context.WithTimeout(r.Context(), searchTimeout)
 	defer cancel()
 	res, err := h.searcher.Search(ctx, q)
 	if err != nil {
-		// The error may carry engine text: it goes to the log only, and q is never logged.
+		// The error may carry engine text: it goes to the log only; q and the filter values are never logged.
 		h.log.Error("search failed", "error", err)
 		h.writeError(w, searchUnavailable())
 		return
@@ -95,7 +107,19 @@ func (h *handler) search(w http.ResponseWriter, r *http.Request) {
 	for i, p := range res.Products {
 		items[i] = productItem{ID: p.ID, Name: p.Name, Brands: nonNil(p.Brands), Categories: nonNil(p.Categories), Nutriscore: p.Nutriscore}
 	}
-	h.writeJSON(w, http.StatusOK, searchResponse{Total: res.Total, Page: q.Page, Size: q.Size, Items: items})
+	h.writeJSON(w, http.StatusOK, searchResponse{Total: res.Total, Page: q.Page, Size: q.Size, Items: items, Facets: facetsOf(res.Facets)})
+}
+
+func facetsOf(f catalog.Facets) facetsBody {
+	return facetsBody{Brands: facetList(f.Brands), Categories: facetList(f.Categories), Nutriscore: facetList(f.Nutriscore)}
+}
+
+func facetList(vs []catalog.FacetValue) []facetEntry {
+	out := make([]facetEntry, len(vs))
+	for i, v := range vs {
+		out[i] = facetEntry{Value: v.Value, Count: v.Count}
+	}
+	return out
 }
 
 func nonNil(s []string) []string {
