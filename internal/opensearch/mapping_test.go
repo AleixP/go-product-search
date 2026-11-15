@@ -79,6 +79,49 @@ func TestMapping_Analysis(t *testing.T) {
 			t.Errorf("autocomplete_edge = %v, want %v", got, want)
 		}
 	})
+	t.Run("filter autocomplete_min_length", func(t *testing.T) {
+		want := map[string]any{"type": "length", "min": float64(2)}
+		if got := a.Filter["autocomplete_min_length"]; !reflect.DeepEqual(got, want) {
+			t.Errorf("autocomplete_min_length = %v, want %v", got, want)
+		}
+	})
+	t.Run("filter autocomplete_truncate", func(t *testing.T) {
+		want := map[string]any{"type": "truncate", "length": float64(15)}
+		if got := a.Filter["autocomplete_truncate"]; !reflect.DeepEqual(got, want) {
+			t.Errorf("autocomplete_truncate = %v, want %v", got, want)
+		}
+	})
+	t.Run("filter names", func(t *testing.T) {
+		got := slices.Sorted(maps.Keys(a.Filter))
+		if want := []string{"autocomplete_edge", "autocomplete_min_length", "autocomplete_truncate"}; !slices.Equal(got, want) {
+			t.Errorf("filters = %v, want exactly %v", got, want)
+		}
+	})
+	t.Run("analyzer autocomplete_search", func(t *testing.T) {
+		// Generic map so that an extra key (char_filter, ...) is caught; the order of
+		// the filters matters: the length and truncate filters run on folded tokens.
+		var raw struct {
+			Settings struct {
+				Analysis struct {
+					Analyzer map[string]map[string]any `json:"analyzer"`
+				} `json:"analysis"`
+			} `json:"settings"`
+		}
+		if err := json.Unmarshal(mappingJSON, &raw); err != nil {
+			t.Fatal(err)
+		}
+		want := map[string]any{
+			"type": "custom", "tokenizer": "standard",
+			"filter": []any{"lowercase", "asciifolding", "autocomplete_min_length", "autocomplete_truncate"},
+		}
+		if got := raw.Settings.Analysis.Analyzer["autocomplete_search"]; !reflect.DeepEqual(got, want) {
+			t.Errorf("autocomplete_search = %v, want %v", got, want)
+		}
+		got := slices.Sorted(maps.Keys(raw.Settings.Analysis.Analyzer))
+		if want := []string{"autocomplete", "autocomplete_search", "folded"}; !slices.Equal(got, want) {
+			t.Errorf("analyzers = %v, want exactly %v", got, want)
+		}
+	})
 	for name, wantFilters := range map[string][]string{
 		"folded":       {"lowercase", "asciifolding"},
 		"autocomplete": {"lowercase", "asciifolding", "autocomplete_edge"},
@@ -89,6 +132,23 @@ func TestMapping_Analysis(t *testing.T) {
 				t.Errorf("analyzer %s = %+v, want custom/standard/%v", name, got, wantFilters)
 			}
 		})
+	}
+}
+
+// TestMapping_AutocompleteCoupling pins the contract between the index-time
+// edge n-grams and the query-time analyzer: a query token shorter than min_gram
+// or longer than max_gram could never match an indexed gram.
+func TestMapping_AutocompleteCoupling(t *testing.T) {
+	f := loadMapping(t).Settings.Anlys.Filter
+	edge, minLen, trunc := f["autocomplete_edge"], f["autocomplete_min_length"], f["autocomplete_truncate"]
+	if minLen["min"] != edge["min_gram"] {
+		t.Errorf("autocomplete_min_length.min = %v, want autocomplete_edge.min_gram %v", minLen["min"], edge["min_gram"])
+	}
+	if trunc["length"] != edge["max_gram"] {
+		t.Errorf("autocomplete_truncate.length = %v, want autocomplete_edge.max_gram %v", trunc["length"], edge["max_gram"])
+	}
+	if edge["min_gram"] == nil || edge["max_gram"] == nil {
+		t.Errorf("autocomplete_edge = %v, want min_gram and max_gram set", edge)
 	}
 }
 
@@ -143,10 +203,24 @@ func TestMapping_Fields(t *testing.T) {
 			t.Errorf("name = %v, want text with analyzer folded", name)
 		}
 	})
+	t.Run("name fields", func(t *testing.T) {
+		got := slices.Sorted(maps.Keys(sub(t, props["name"], "fields")))
+		if want := []string{"autocomplete", "norm"}; !slices.Equal(got, want) {
+			t.Errorf("name fields = %v, want exactly %v", got, want)
+		}
+	})
 	t.Run("name.autocomplete", func(t *testing.T) {
 		ac := sub(t, props["name"], "fields", "autocomplete")
-		if ac["type"] != "text" || ac["analyzer"] != "autocomplete" || ac["search_analyzer"] != "folded" {
-			t.Errorf("name.autocomplete = %v, want text, analyzer autocomplete, search_analyzer folded", ac)
+		want := map[string]any{"type": "text", "analyzer": "autocomplete", "search_analyzer": "autocomplete_search"}
+		if !reflect.DeepEqual(ac, want) {
+			t.Errorf("name.autocomplete = %v, want %v", ac, want)
+		}
+	})
+	t.Run("name.norm", func(t *testing.T) {
+		norm := sub(t, props["name"], "fields", "norm")
+		want := map[string]any{"type": "keyword", "normalizer": "folded_keyword", "ignore_above": float64(1024)}
+		if !reflect.DeepEqual(norm, want) {
+			t.Errorf("name.norm = %v, want %v", norm, want)
 		}
 	})
 	for _, field := range []string{"brands", "categories"} {
@@ -266,7 +340,9 @@ func TestMapping_GoldenDocument(t *testing.T) {
 			},
 			"analysis": map[string]any{
 				"filter": map[string]any{
-					"autocomplete_edge": map[string]any{"type": "edge_ngram", "min_gram": float64(2), "max_gram": float64(15)},
+					"autocomplete_edge":       map[string]any{"type": "edge_ngram", "min_gram": float64(2), "max_gram": float64(15)},
+					"autocomplete_min_length": map[string]any{"type": "length", "min": float64(2)},
+					"autocomplete_truncate":   map[string]any{"type": "truncate", "length": float64(15)},
 				},
 				"analyzer": map[string]any{
 					"folded": map[string]any{
@@ -276,6 +352,10 @@ func TestMapping_GoldenDocument(t *testing.T) {
 					"autocomplete": map[string]any{
 						"type": "custom", "tokenizer": "standard",
 						"filter": []any{"lowercase", "asciifolding", "autocomplete_edge"},
+					},
+					"autocomplete_search": map[string]any{
+						"type": "custom", "tokenizer": "standard",
+						"filter": []any{"lowercase", "asciifolding", "autocomplete_min_length", "autocomplete_truncate"},
 					},
 				},
 				"normalizer": map[string]any{
@@ -292,7 +372,8 @@ func TestMapping_GoldenDocument(t *testing.T) {
 				"name": map[string]any{
 					"type": "text", "analyzer": "folded",
 					"fields": map[string]any{
-						"autocomplete": map[string]any{"type": "text", "analyzer": "autocomplete", "search_analyzer": "folded"},
+						"autocomplete": map[string]any{"type": "text", "analyzer": "autocomplete", "search_analyzer": "autocomplete_search"},
+						"norm":         map[string]any{"type": "keyword", "normalizer": "folded_keyword", "ignore_above": float64(1024)},
 					},
 				},
 				"brands": map[string]any{

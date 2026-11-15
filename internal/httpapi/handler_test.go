@@ -36,8 +36,13 @@ func (f *fakeSearcher) Search(ctx context.Context, q catalog.Query) (catalog.Res
 }
 
 func newTestHandler(s catalog.Searcher) (http.Handler, *bytes.Buffer) {
+	return newRoutedHandler(s, &fakeSuggester{})
+}
+
+// newRoutedHandler builds the real router with both ports given.
+func newRoutedHandler(s catalog.Searcher, sg catalog.Suggester) (http.Handler, *bytes.Buffer) {
 	var logs bytes.Buffer
-	return New(s, slog.New(slog.NewTextHandler(&logs, nil))), &logs
+	return New(s, sg, slog.New(slog.NewTextHandler(&logs, nil))), &logs
 }
 
 func do(h http.Handler, method, target string) *httptest.ResponseRecorder {
@@ -344,5 +349,80 @@ func TestInternalErrorBody_MatchesEnvelope(t *testing.T) {
 	}
 	if e.status != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500", e.status)
+	}
+}
+
+func TestRoutes_SuggestReachesSuggesterOnly(t *testing.T) {
+	s := &fakeSearcher{}
+	sg := &fakeSuggester{result: []catalog.Suggestion{{Text: "Tea"}}}
+	h, _ := newRoutedHandler(s, sg)
+
+	rec := do(h, http.MethodGet, "/suggest?q=te")
+
+	if want := `{"suggestions":[{"text":"Tea"}]}` + "\n"; rec.Code != http.StatusOK || rec.Body.String() != want {
+		t.Errorf("GET /suggest = %d %q, want 200 %q", rec.Code, rec.Body.String(), want)
+	}
+	if sg.calls != 1 || s.calls != 0 {
+		t.Errorf("suggester calls = %d, searcher calls = %d, want 1 and 0", sg.calls, s.calls)
+	}
+}
+
+func TestRoutes_SearchReachesSearcherOnly(t *testing.T) {
+	s := &fakeSearcher{}
+	sg := &fakeSuggester{}
+	h, _ := newRoutedHandler(s, sg)
+
+	rec := do(h, http.MethodGet, "/search?q=x")
+
+	if rec.Code != http.StatusOK || s.calls != 1 || sg.calls != 0 {
+		t.Errorf("GET /search = %d, searcher calls = %d, suggester calls = %d, want 200, 1 and 0", rec.Code, s.calls, sg.calls)
+	}
+}
+
+func TestRoutes_SuggestHeadRunsOnceWithoutBody(t *testing.T) {
+	sg := &fakeSuggester{result: []catalog.Suggestion{{Text: "Tea"}}}
+	h, _ := newRoutedHandler(&fakeSearcher{}, sg)
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Head(srv.URL + "/suggest?q=te")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK || len(body) != 0 || sg.calls != 1 {
+		t.Errorf("HEAD /suggest = %d, %d body bytes, %d calls; want 200, 0 and 1", resp.StatusCode, len(body), sg.calls)
+	}
+}
+
+func TestRoutes_SuggestMethodNotAllowed(t *testing.T) {
+	for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions} {
+		sg := &fakeSuggester{}
+		h, _ := newRoutedHandler(&fakeSearcher{}, sg)
+
+		rec := do(h, m, "/suggest?q=te")
+
+		allow := rec.Header().Get("Allow")
+		if rec.Code != http.StatusMethodNotAllowed || !strings.Contains(allow, "GET") || !strings.Contains(allow, "HEAD") {
+			t.Errorf("%s /suggest = %d Allow=%q, want 405 with GET and HEAD", m, rec.Code, allow)
+		}
+		if !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/plain") || sg.calls != 0 {
+			t.Errorf("%s /suggest: Content-Type=%q calls=%d, want plain text and 0 calls", m, rec.Header().Get("Content-Type"), sg.calls)
+		}
+	}
+}
+
+func TestRoutes_SuggestLookalikePathsAre404(t *testing.T) {
+	for _, path := range []string{"/suggest/", "/suggestions", "/SUGGEST"} {
+		sg := &fakeSuggester{}
+		h, _ := newRoutedHandler(&fakeSearcher{}, sg)
+
+		rec := do(h, http.MethodGet, path+"?q=te")
+
+		if rec.Code != http.StatusNotFound || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/plain") || sg.calls != 0 {
+			t.Errorf("GET %s = %d %q, %d calls; want plain 404 and 0 calls", path, rec.Code, rec.Header().Get("Content-Type"), sg.calls)
+		}
 	}
 }
