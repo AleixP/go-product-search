@@ -1,0 +1,26 @@
+{
+  "size": 20,
+  "track_total_hits": false,
+  "_source": [
+    "name"
+  ],
+  "query": {
+    "match": {
+      "name.autocomplete": {
+        "query": "Crème \"brûlée\" \u003cb\u003e \u0026 \\ x",
+        "operator": "and"
+      }
+    }
+  },
+  "collapse": {
+    "field": "name.norm"
+  },
+  "sort": [
+    {
+      "_score": "desc"
+    },
+    {
+      "name.norm": "asc"
+    }
+  ]
+}

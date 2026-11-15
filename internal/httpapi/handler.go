@@ -68,16 +68,18 @@ type productItem struct {
 }
 
 type handler struct {
-	searcher catalog.Searcher
-	log      *slog.Logger
+	searcher  catalog.Searcher
+	suggester catalog.Suggester
+	log       *slog.Logger
 }
 
-// New returns the HTTP handler of the API: only GET /search (HEAD also
-// matches). Other paths and methods get the mux's plain 404 and 405.
-func New(s catalog.Searcher, log *slog.Logger) http.Handler {
-	h := &handler{searcher: s, log: log}
+// New returns the HTTP handler of the API: GET /search and GET /suggest (HEAD
+// also matches both). Other paths and methods get the mux's plain 404 and 405.
+func New(s catalog.Searcher, sg catalog.Suggester, log *slog.Logger) http.Handler {
+	h := &handler{searcher: s, suggester: sg, log: log}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /search", h.search)
+	mux.HandleFunc("GET /suggest", h.suggest)
 	return mux
 }
 

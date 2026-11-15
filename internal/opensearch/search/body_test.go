@@ -14,6 +14,30 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the golden files")
 
+// assertGolden indents body like the golden files (2 spaces, trailing newline)
+// and compares it to testdata/file; with -update it rewrites the file first.
+func assertGolden(t *testing.T, file string, body []byte) {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, body, "", "  "); err != nil {
+		t.Fatalf("body is not valid JSON: %v", err)
+	}
+	buf.WriteByte('\n')
+	path := filepath.Join("testdata", file)
+	if *update {
+		if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(buf.Bytes(), want) {
+		t.Errorf("body differs from %s\ngot:\n%s\nwant:\n%s", path, buf.Bytes(), want)
+	}
+}
+
 func TestBody_Golden(t *testing.T) {
 	tests := []struct {
 		file string
@@ -38,24 +62,7 @@ func TestBody_Golden(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Body(%+v) error = %v", tt.q, err)
 			}
-			var buf bytes.Buffer
-			if err := json.Indent(&buf, body, "", "  "); err != nil {
-				t.Fatalf("Body(%+v) is not valid JSON: %v", tt.q, err)
-			}
-			buf.WriteByte('\n')
-			path := filepath.Join("testdata", tt.file)
-			if *update {
-				if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
-					t.Fatal(err)
-				}
-			}
-			want, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(buf.Bytes(), want) {
-				t.Errorf("Body(%+v) differs from %s\ngot:\n%s\nwant:\n%s", tt.q, path, buf.Bytes(), want)
-			}
+			assertGolden(t, tt.file, body)
 		})
 	}
 }

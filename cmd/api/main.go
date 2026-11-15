@@ -36,8 +36,14 @@ var shutdownTimeout = 10 * time.Second
 // listen opens the listening socket; a variable so tests can inject failures.
 var listen = net.Listen
 
-// openSearcher connects to OpenSearch and returns it as a catalog.Searcher.
-func openSearcher(ctx context.Context, addr string) (catalog.Searcher, error) {
+// backend is what the API needs from the search engine: search and suggest.
+type backend interface {
+	catalog.Searcher
+	catalog.Suggester
+}
+
+// openSearcher connects to OpenSearch and returns it as a backend.
+func openSearcher(ctx context.Context, addr string) (backend, error) {
 	c, err := opensearch.New(ctx, addr)
 	if err != nil {
 		return nil, err // not c: a nil *Client in the interface would not be nil
@@ -97,7 +103,7 @@ func newServer(h http.Handler, log *slog.Logger) *http.Server {
 // run serves until ctx is done and returns the process exit code. Logs and
 // errors go to stderr.
 func run(ctx context.Context, args []string, stderr io.Writer,
-	newSearcher func(ctx context.Context, addr string) (catalog.Searcher, error)) int {
+	newSearcher func(ctx context.Context, addr string) (backend, error)) int {
 	fs := flag.NewFlagSet("api", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	addr := fs.String("addr", defaultAddr, "address to listen on (host:port)")
@@ -132,7 +138,7 @@ func run(ctx context.Context, args []string, stderr io.Writer,
 	if bindsAllInterfaces(ln.Addr()) {
 		log.Warn("listening on all interfaces; the API has no authentication", "addr", ln.Addr().String())
 	}
-	srv := newServer(httpapi.New(s, log), log)
+	srv := newServer(httpapi.New(s, s, log), log)
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(ln) }()
 	log.Info("listening", "addr", ln.Addr().String()) // contract: read by the e2e test
