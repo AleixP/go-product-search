@@ -48,14 +48,19 @@ func (f fakeSearcher) Search(ctx context.Context, _ catalog.Query) (catalog.Resu
 	return catalog.Result{Total: 1, Products: []catalog.Product{{ID: "1", Name: "Tea"}}}, nil
 }
 
-func factoryOf(s catalog.Searcher) func(context.Context, string) (catalog.Searcher, error) {
-	return func(context.Context, string) (catalog.Searcher, error) { return s, nil }
+// Suggest answers every suggestion request with one fixed suggestion.
+func (fakeSearcher) Suggest(context.Context, catalog.SuggestQuery) ([]catalog.Suggestion, error) {
+	return []catalog.Suggestion{{Text: "Tea"}}, nil
+}
+
+func factoryOf(s backend) func(context.Context, string) (backend, error) {
+	return func(context.Context, string) (backend, error) { return s, nil }
 }
 
 var listeningRe = regexp.MustCompile(`msg=listening addr=(\S+)`)
 
 // startRun runs the server in the background and waits for its listening line.
-func startRun(t *testing.T, args []string, s catalog.Searcher) (addr string, cancel context.CancelFunc, done <-chan int, out *syncBuf) {
+func startRun(t *testing.T, args []string, s backend) (addr string, cancel context.CancelFunc, done <-chan int, out *syncBuf) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -130,7 +135,7 @@ func TestNewServer_Settings(t *testing.T) {
 
 func TestRun_FlagErrors(t *testing.T) {
 	called := false
-	f := func(context.Context, string) (catalog.Searcher, error) { called = true; return nil, errors.New("x") }
+	f := func(context.Context, string) (backend, error) { called = true; return nil, errors.New("x") }
 	tests := []struct {
 		name     string
 		args     []string
@@ -171,7 +176,7 @@ func TestRun_UsageShowsFlagDefaults(t *testing.T) {
 
 func TestRun_FactoryErrorExitsOneAndGetsFlagValue(t *testing.T) {
 	var got string
-	f := func(_ context.Context, addr string) (catalog.Searcher, error) {
+	f := func(_ context.Context, addr string) (backend, error) {
 		got = addr
 		return nil, errors.New("ping failed")
 	}
@@ -190,7 +195,7 @@ func TestRun_FactoryErrorExitsOneAndGetsFlagValue(t *testing.T) {
 
 func TestRun_DefaultOpenSearchAddress(t *testing.T) {
 	var got string
-	f := func(_ context.Context, addr string) (catalog.Searcher, error) {
+	f := func(_ context.Context, addr string) (backend, error) {
 		got = addr
 		return nil, errors.New("stop")
 	}
@@ -218,7 +223,7 @@ var httpClient = &http.Client{Timeout: 5 * time.Second}
 // runBounded runs run in a goroutine with a 3 s context and gives up after 5 s,
 // returning -1. A regression that keeps serving, or a run that ignores its
 // context, then fails the test instead of hanging the package.
-func runBounded(args []string, stderr io.Writer, newSearcher func(context.Context, string) (catalog.Searcher, error)) int {
+func runBounded(args []string, stderr io.Writer, newSearcher func(context.Context, string) (backend, error)) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	done := make(chan int, 1)
@@ -275,6 +280,26 @@ func TestRun_ServesSearchAndStopsOnCancel(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "level=ERROR") || strings.Contains(out.String(), "level=WARN") {
 		t.Errorf("clean shutdown logged problems: %s", out.String())
+	}
+}
+
+func TestRun_ServesSuggest(t *testing.T) {
+	addr, cancel, done, _ := startRun(t, []string{"--addr", "127.0.0.1:0"}, fakeSearcher{})
+	resp, err := httpClient.Get("http://" + addr + "/suggest?q=te")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if want := `{"suggestions":[{"text":"Tea"}]}` + "\n"; resp.StatusCode != 200 || string(body) != want {
+		t.Errorf("GET /suggest = %d %q, want 200 %q", resp.StatusCode, body, want)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
+		t.Errorf("Content-Type = %q, want application/json", ct)
+	}
+	cancel()
+	if code := waitCode(t, done, time.Second); code != 0 {
+		t.Errorf("code = %d, want 0", code)
 	}
 }
 
@@ -430,5 +455,25 @@ func TestRun_StartupErrorsDoNotLeakPathOrUserinfo(t *testing.T) {
 		if d := time.Since(start); d > 2*time.Second {
 			t.Errorf("%s: took %v", addr, d)
 		}
+	}
+}
+
+func TestOpenSearcher_ErrorReturnsNilInterface(t *testing.T) {
+	closed, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := closed.Addr().String()
+	_ = closed.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	b, err := openSearcher(ctx, "http://"+addr)
+
+	if err == nil {
+		t.Fatal("err = nil, want a connection error")
+	}
+	if b != nil {
+		t.Errorf("backend = %#v, want a nil interface", b)
 	}
 }

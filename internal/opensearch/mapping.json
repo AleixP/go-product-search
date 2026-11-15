@@ -11,6 +11,14 @@
           "type": "edge_ngram",
           "min_gram": 2,
           "max_gram": 15
+        },
+        "autocomplete_min_length": {
+          "type": "length",
+          "min": 2
+        },
+        "autocomplete_truncate": {
+          "type": "truncate",
+          "length": 15
         }
       },
       "analyzer": {
@@ -23,6 +31,11 @@
           "type": "custom",
           "tokenizer": "standard",
           "filter": ["lowercase", "asciifolding", "autocomplete_edge"]
+        },
+        "autocomplete_search": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "asciifolding", "autocomplete_min_length", "autocomplete_truncate"]
         }
       },
       "normalizer": {
@@ -44,8 +57,9 @@
           "autocomplete": {
             "type": "text",
             "analyzer": "autocomplete",
-            "search_analyzer": "folded"
-          }
+            "search_analyzer": "autocomplete_search"
+          },
+          "norm": {"type": "keyword", "normalizer": "folded_keyword", "ignore_above": 1024}
         }
       },
       "brands": {
