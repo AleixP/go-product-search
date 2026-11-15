@@ -420,6 +420,7 @@ func TestAPI_EndToEnd(t *testing.T) {
 	})
 
 	filterSubtests(t, stub, client, base, proc)
+	suggestSubtests(t, stub, client, base, proc)
 
 	t.Run("SIGINT shuts down gracefully with exit 0", func(t *testing.T) {
 		if err := proc.cmd.Process.Signal(os.Interrupt); err != nil {
