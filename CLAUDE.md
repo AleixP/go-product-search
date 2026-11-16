@@ -65,6 +65,7 @@ Check it in the new project: `/agents` should show only these four agents, and a
 gofmt -l . && go vet ./... && go build -o /dev/null ./... && go test -race -short ./...
 ```
 
+- The full `go test ./...` runs the OpenSearch integration test and needs a running Docker daemon (it skips locally when Docker is missing and fails when `CI` is non-empty); `make test-integration` runs only it.
 - `-short` skips the heavy performance and end-to-end tests, so the loop stays fast. Run the full `go test ./...` (without `-short`) once before the final user approval.
 - Never run plain `go build ./...`: with a single `main` package it leaves a binary in the repo. Build real binaries only outside the repo.
 - Heavy tests (large inputs, long benchmarks) must skip themselves under `testing.Short()`.
