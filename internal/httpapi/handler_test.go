@@ -42,7 +42,7 @@ func newTestHandler(s catalog.Searcher) (http.Handler, *bytes.Buffer) {
 // newRoutedHandler builds the real router with both ports given.
 func newRoutedHandler(s catalog.Searcher, sg catalog.Suggester) (http.Handler, *bytes.Buffer) {
 	var logs bytes.Buffer
-	return New(s, sg, slog.New(slog.NewTextHandler(&logs, nil))), &logs
+	return New(s, sg, &fakeGetter{}, &fakeHealth{}, slog.New(slog.NewTextHandler(&logs, nil))), &logs
 }
 
 func do(h http.Handler, method, target string) *httptest.ResponseRecorder {
