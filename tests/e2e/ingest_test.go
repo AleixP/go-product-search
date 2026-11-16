@@ -1,6 +1,7 @@
-// Package e2e holds the cross-package end-to-end tests. They run the real
-// ingest binary against a stub OpenSearch served by httptest: no network and no
-// real cluster.
+// Package e2e holds the cross-package end-to-end tests. Most run the real
+// binaries against a stub OpenSearch served by httptest: no network and no real
+// cluster. The package also holds the Docker-backed integration test
+// (integration_test.go), which starts its own OpenSearch container.
 package e2e
 
 import (

@@ -1,0 +1,30 @@
+url	nutriscore_grade	brands	code	quantity	categories_tags	product_name	countries_tags
+https://example.invalid/p/9991000000001	c	Cocoa Crest	9991000000001		en:chocolates,en:snacks	Dark Chocolate Bar	en:united-states
+https://example.invalid/p/9991000000002	e	 Cocoa Crest 	9991000000002		en:chocolates,en:snacks	Milk Chocolate Bar	en:united-states,en:canada
+https://example.invalid/p/9991000000003	d	Sweet Hearth	9991000000003	80 g	en:chocolates,en:snacks,fr:chocolats	White Chocolate Chips	en:united-states
+https://example.invalid/p/9991000000004	E	Sweet Hearth	9991000000004		en:spreads,en:chocolates	Chocolate Hazelnut Spread	en:united-states
+https://example.invalid/p/9991000000005	c	Green Valley, Green Valley	9991000000005		en:dairies,en:cheeses,en:snacks	Cheddar Cheese Slices	en:united-states
+https://example.invalid/p/9991000000006	d	Zenith Bakery	9991000000006	110 g	en:snacks,en:biscuits,en:cheeses	Chili Cheese Crackers	en:united-states
+https://example.invalid/p/9991000000101	b	Boulangerie Lune	9991000000101		en:breads	Baguette Tradition	en:france
+https://example.invalid/p/9991000000007	d	Nordic Farms,  Green Valley	9991000000007		en:soups	Chicken Noodle Soup	en:united-states
+https://example.invalid/p/9991000000008	b	Olive Grove	9991000000008		en:spreads,en:plant-based-foods,en:snacks	Chickpea Hummus	en:united-states
+https://example.invalid/p/9991000000009	a	Leaf House	9991000000009	140 g	en:beverages,en:plant-based-foods	Chamomile Herbal Tea	en:united-states
+https://example.invalid/p/9991000000010	e	Sweet Hearth	9991000000010		en:spreads	Chestnut Cream	en:united-states
+https://example.invalid/p/9991000000011	d	Crunch Mill	9991000000011		en:snacks,en:breakfast-cereals,en:biscuits	Chewy Granola Bars	en:united-states
+https://example.invalid/p/9991000000012	d	Green Valley	9991000000012	170 g	en:dairies,en:cheeses,en:beverages,en:breakfast-cereals	Cherry Cheesecake Yogurt	en:united-states
+https://example.invalid/p/9991000000102	c	Kyoto Snacks	9991000000102		fr:biscuits-aperitifs	Wasabi Rice Crackers	en:united-states
+https://example.invalid/p/9991000000013	b	Acme Foods	9991000000013		en:dairies,en:cheeses	Crème Fraîche	en:united-states
+https://example.invalid/p/9991000000014	c	ACME FOODS	9991000000014		en:dairies,en:beverages	Creme Fraiche	en:united-states
+https://example.invalid/p/9991000000015	e	Acmé Foods	9991000000015	200 g	en:dairies,en:cheeses	CREME FRAICHE	en:united-states
+https://example.invalid/p/9991000000016	e	Crunch Mill	9991000000016		en:snacks,en:breakfast-cereals,en:biscuits	Supercalifragilistic Crunch	en:united-states
+https://example.invalid/p/9991000000017	b	Aqua Peak	9991000000017		en:beverages,en:plant-based-foods	Sparkling Orange Water	en:united-states
+https://example.invalid/p/9991000000018	a	Olive Grove	9991000000018	230 g	en:beverages,en:plant-based-foods	Almond Milk Unsweetened	en:united-states
+https://example.invalid/p/9991000000103	d		9991000000103		en:snacks	Plain Rice Cakes	en:united-states
+https://example.invalid/p/9991000000019	d	Green Valley	9991000000019		en:dairies,en:beverages	Whole Milk	en:united-states
+https://example.invalid/p/9991000000020	c	Aqua Peak	9991000000020		en:beverages,en:plant-based-foods	Orange Juice	en:united-states
+https://example.invalid/p/9991000000021	c	Fizz Co	9991000000021	260 g	en:beverages	Cola Zero	en:united-states
+https://example.invalid/p/9991000000022	d	Nonna Pantry	9991000000022		en:sauces,en:plant-based-foods	Tomato Pasta Sauce	en:united-states
+https://example.invalid/p/9991000000023	e	Nonna Pantry	9991000000023		en:soups,en:sauces	Tomato Basil Soup	en:united-states
+https://example.invalid/p/9991000000024	e	Crunch Mill	9991000000024	290 g	en:snacks	Salted Potato Crisps	en:united-states
+https://example.invalid/p/9991000000104	unknown	Maple Hollow	9991000000104		en:sweeteners	Maple Syrup	en:united-states
+https://example.invalid/p/9991000000025	e	Cold Peak	9991000000025		en:frozen-desserts,en:dairies,en:snacks	Vanilla Ice Cream	en:united-states
