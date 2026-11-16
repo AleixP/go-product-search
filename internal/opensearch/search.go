@@ -71,18 +71,23 @@ func (c *Client) Search(ctx context.Context, q catalog.Query) (catalog.Result, e
 // searchError wraps a failed search call without the request URL or any
 // response body text; an engine error object keeps only status and type.
 func searchError(in opensearchapi.Inspect, err error) error {
+	return engineError("search products", in, err)
+}
+
+// engineError is searchError for any operation named op.
+func engineError(op string, in opensearchapi.Inspect, err error) error {
 	var structErr *osclient.StructError
 	if errors.As(err, &structErr) {
-		return fmt.Errorf("search products: status %d, type %s", structErr.Status, structErr.Err.Type)
+		return fmt.Errorf("%s: status %d, type %s", op, structErr.Status, structErr.Err.Type)
 	}
 	var strErr *osclient.StringError
 	if errors.Is(err, osclient.ErrJSONUnmarshalBody) || errors.Is(err, osclient.ErrUnknownOpensearchError) || errors.As(err, &strErr) {
 		// The API client drops the response when a 2xx body does not decode,
 		// so the status is only known for error responses.
 		if in.Response == nil {
-			return errors.New("search products: undecodable response")
+			return fmt.Errorf("%s: undecodable response", op)
 		}
-		return fmt.Errorf("search products: undecodable response (status %d)", in.Response.StatusCode)
+		return fmt.Errorf("%s: undecodable response (status %d)", op, in.Response.StatusCode)
 	}
-	return fmt.Errorf("search products: %w", stripURL(in, err))
+	return fmt.Errorf("%s: %w", op, stripURL(in, err))
 }

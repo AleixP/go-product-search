@@ -63,6 +63,10 @@ type stubSearch struct {
 	path     string
 	searches int
 	analyzes []analyzeCall
+
+	gets        int    // GET /products/_doc/{id} requests
+	getURI      string // raw RequestURI of the last one
+	aliasChecks int    // HEAD /_alias/products requests
 }
 
 func newStubSearch(t *testing.T) *stubSearch {
@@ -83,6 +87,10 @@ func newStubSearch(t *testing.T) *stubSearch {
 				return
 			}
 			writeJSON(w, http.StatusOK, searchBody(string(body), s.noAggs.Load()))
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/"+alias+"/_doc/"):
+			s.getDoc(w, r)
+		case r.Method == http.MethodHead && r.RequestURI == "/_alias/"+alias:
+			s.aliasExists(w)
 		case r.URL.Path == "/"+alias+"/_analyze":
 			s.mu.Lock()
 			s.analyzes = append(s.analyzes, analyzeCall{r.Method, string(body)})
@@ -421,6 +429,7 @@ func TestAPI_EndToEnd(t *testing.T) {
 
 	filterSubtests(t, stub, client, base, proc)
 	suggestSubtests(t, stub, client, base, proc)
+	productSubtests(t, stub, client, base, proc)
 
 	t.Run("SIGINT shuts down gracefully with exit 0", func(t *testing.T) {
 		if err := proc.cmd.Process.Signal(os.Interrupt); err != nil {

@@ -3,10 +3,6 @@
 A product search service in Go on OpenSearch: full-text search, combinable
 filters, disjunctive facets and autocomplete over a public product catalogue.
 
-> **Status:** search, filters, disjunctive facets, autocomplete, the bulk ingest
-> and the integration tests work. `GET /products/{id}` and `GET /healthz` are not
-> implemented yet (T-9).
-
 ## What it does
 
 - Full-text search over product name, brands and categories
@@ -40,8 +36,6 @@ make ingest      # downloads and indexes the default sample
 make run         # API on 127.0.0.1:8080; run the next line in a second terminal
 curl -s 'http://127.0.0.1:8080/search?q=chocolate&size=2'
 ```
-
-`make` with no target lists every target.
 
 The default `make ingest` streams the official export
 (`https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz`,
@@ -125,19 +119,18 @@ interfaces. Do not expose either to a network.
 
 ## API
 
-The service listens on `http://127.0.0.1:8080`. Every answer from `/search` and
-`/suggest`, success or error, is JSON.
+The service listens on `http://127.0.0.1:8080`. Every answer from `/search`,
+`/suggest`, `/products/{id}` and `/healthz`, success or error, is JSON.
 
 | Endpoint | What it returns |
 | --- | --- |
 | `GET /search?q=&brands=&categories=&nutriscore=&page=&size=` | A page of products, the exact total and facet counts |
 | `GET /suggest?q=&size=` | Up to 20 distinct product names for the typed text |
-| `GET /products/{id}` | not implemented yet (T-9) |
-| `GET /healthz` | not implemented yet (T-9) |
+| `GET /products/{id}` | One product, the same object as a `/search` item |
+| `GET /healthz` | 200 `{"status":"ok"}` when OpenSearch answers and the `products` alias exists, else 503 `search_unavailable` |
 
-`HEAD` behaves like `GET` on `/search` and `/suggest`. Other methods get a plain
-405 and unknown paths a plain 404 (both `text/plain`, not JSON), so
-`/products/{id}` and `/healthz` answer 404 for now.
+`HEAD` behaves like `GET` on every endpoint. Other methods get a plain 405 and
+unknown paths a plain 404 (both `text/plain`, not JSON).
 
 ### Parameters
 
@@ -149,10 +142,12 @@ The service listens on `http://127.0.0.1:8080`. Every answer from `/search` and
 | window | `page * size` must be at most 10,000, otherwise `page_out_of_range` |
 | `brands`, `categories` | repeated keys (`brands=a&brands=b`), at most 20 values, each at most 256 runes (Unicode code points); matched after case and accent folding |
 | `nutriscore` | repeated key, each value one of `a` to `e` (blank values ignored, surrounding spaces trimmed) |
+| `id` | the `/products/{id}` path segment: at most 128 bytes, valid UTF-8, no control characters; an id that breaks a rule gets the same 404 `not_found` as a missing product |
 
 A key that is not listed, a repeated `q`, `page` or `size`, and any value that
 breaks a rule get a 400. On `/suggest` only `q` and `size` exist, and a `q` under
-2 characters gives `{"suggestions":[]}`.
+2 characters gives `{"suggestions":[]}`. `/products/{id}` and `/healthz` take no
+query parameters: any query string gets 400 `invalid_parameter`.
 
 ### Responses
 
@@ -173,11 +168,15 @@ breaks a rule get a 400. On `/suggest` only `q` and `size` exist, and a `q` unde
 
 `/suggest` returns `{"suggestions":[{"text":"..."}]}`.
 
+`/products/{id}` returns the bare item object of `/search`; `/healthz` returns `{"status":"ok"}`.
+
 Errors have one shape, `{"error":{"code":"...","message":"..."}}`. Messages are
 fixed text. They name a parameter or a limit and never repeat a value; an unknown
 `/search` key is named only if it is 1 to 32 characters from letters, digits and
-`_.-[]`. The codes are `invalid_parameter` and `page_out_of_range` (400), `search_unavailable` (503, OpenSearch failed or timed
-out) and `internal_error` (500).
+`_.-[]`. The codes are `invalid_parameter` and `page_out_of_range` (400),
+`not_found` (404, unknown or invalid product id), `search_unavailable` (503,
+OpenSearch failed or timed out, or the `products` alias does not exist) and
+`internal_error` (500).
 
 ### Examples
 
@@ -236,16 +235,20 @@ curl -s -w '\n%{http_code}\n' 'http://127.0.0.1:8080/search?q=chocolate&size=500
 400
 ```
 
-`/healthz` is not implemented yet, so it gets the router's plain 404:
+One product by id, a missing id, and the health check (captured on 2026-11-16 on
+the same index):
 
 ```sh
-curl -s -w '\n%{http_code}\n' 'http://127.0.0.1:8080/healthz'
+curl -s 'http://127.0.0.1:8080/products/0041250691600'
+curl -s 'http://127.0.0.1:8080/products/0000000000000'
+curl -s -w '%{http_code}\n' 'http://127.0.0.1:8080/healthz'
 ```
 
 ```
-404 page not found
-
-404
+{"id":"0041250691600","name":"Chocolate","brands":["Meijer"],"categories":["desserts"],"nutriscore":"e"}
+{"error":{"code":"not_found","message":"product not found"}}
+{"status":"ok"}
+200
 ```
 
 The example data is Open Food Facts data, available under the ODbL; the attribution and links are in "Data and attribution".
@@ -269,7 +272,7 @@ The example data is Open Food Facts data, available under the ODbL; the attribut
 ```
 cmd/api/                      HTTP server
 cmd/ingest/                   loads the dataset into OpenSearch
-internal/catalog/             types (Product, BulkResult, Query, Result, FacetValue, Facets, SuggestQuery, Suggestion) and ports (Searcher, Suggester, Indexer)
+internal/catalog/             types (Product, BulkResult, Query, Result, FacetValue, Facets, SuggestQuery, Suggestion) and ports (Searcher, Suggester, Getter, HealthChecker, Indexer)
 internal/httpapi/             handlers, parameter validation, error shape
 internal/opensearch/          adapter (opensearch-go) and mapping.json
 internal/opensearch/search/   query builders, with golden files in testdata/
@@ -284,7 +287,8 @@ testdata/                     fixtures: products.tsv (Open Food Facts sample, OD
 Each one says what was chosen, what was left out and why.
 
 1. Ports and adapters.
-   - Chosen: `catalog.Searcher`, `catalog.Suggester` and `catalog.Indexer` are
+   - Chosen: `catalog.Searcher`, `catalog.Suggester`, `catalog.Getter`,
+     `catalog.HealthChecker` and `catalog.Indexer` are
      small interfaces; the OpenSearch code is an adapter in `internal/opensearch`;
      the query builders live in `internal/opensearch/search` and are pinned by
      golden JSON files (regenerated with `-update`).
@@ -341,7 +345,7 @@ Each one says what was chosen, what was left out and why.
      51.0 MB at 1 MiB.
 6. HTTP.
    - Chosen: standard `net/http` routing; fixed error messages that never repeat a
-     value; a 3 s timeout per search and server read, write and idle timeouts;
+     value; a 3 s timeout per engine call and server read, write and idle timeouts;
      the OpenSearch client has its own transport with 64 idle connections per
      host. There is no cap on in-flight requests, a documented shortcut in the
      handlers.
@@ -355,7 +359,10 @@ evaluation.
 
 ### Known limits
 
-- No cap on in-flight searches or suggests.
+- No cap on in-flight requests.
+- `/healthz` checks that the `products` alias exists, not that its index answers
+  searches.
+- An id of `.` or `..` (sent as `%2E`/`%2E%2E`) always gets 404; a literal `/products/..` is redirected by the server.
 - At most 8 `_analyze` calls in flight per process (the engine's analyze queue
   holds 16).
 - Filter values are at most 256 runes (Unicode code points); the index's `ignore_above` counts
