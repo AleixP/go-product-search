@@ -4,10 +4,10 @@ GOLANGCI_LINT_VERSION := v2.15.0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up down ingest data run test lint
+.PHONY: help up down ingest data run test test-integration lint
 
 help: ## List the available targets
-	@grep -h -E '^[A-Za-z0-9_.-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "%-8s %s\n", $$1, $$2}'
+	@grep -h -E '^[A-Za-z0-9_.-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "%-17s %s\n", $$1, $$2}'
 
 up: ## Start OpenSearch with docker compose and wait until healthy
 	docker compose up -d --wait
@@ -28,6 +28,9 @@ run: ## Start the search API (pass flags with ARGS="...")
 
 test: ## Run the Go tests with the race detector (-short)
 	go test -race -short ./...
+
+test-integration: ## Run the OpenSearch integration test (needs Docker)
+	go test -race -count=1 -timeout 15m -v -run '^TestIntegration$$' ./tests/e2e/
 
 # Requires golangci-lint v2.15.0 (GOLANGCI_LINT_VERSION) installed locally (no auto-install).
 lint: ## Run golangci-lint (needs the pinned local version)

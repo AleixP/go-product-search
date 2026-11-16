@@ -19,5 +19,8 @@ Licences:
   Database Contents License:   https://opendatacommons.org/licenses/dbcl/1-0/
   Open Food Facts terms:       https://world.openfoodfacts.org/terms-of-use
 
+testdata/integration.tsv is synthetic test data written for this project. It
+is not Open Food Facts data and is not covered by the ODbL notice above.
+
 This notice is separate from the licence of the project code and applies
-only to the files in testdata/.
+only to testdata/products.tsv.
