@@ -12,7 +12,8 @@ import (
 	"github.com/AleixP/go-product-search/internal/catalog"
 )
 
-// searchTimeout bounds one search, including the OpenSearch round trip.
+// searchTimeout bounds the one engine call of every request (search, suggest,
+// get and health check).
 const searchTimeout = 3 * time.Second
 
 // internalErrorBody is the 500 answer used when encoding a response fails.
@@ -70,16 +71,21 @@ type productItem struct {
 type handler struct {
 	searcher  catalog.Searcher
 	suggester catalog.Suggester
+	getter    catalog.Getter
+	health    catalog.HealthChecker
 	log       *slog.Logger
 }
 
-// New returns the HTTP handler of the API: GET /search and GET /suggest (HEAD
-// also matches both). Other paths and methods get the mux's plain 404 and 405.
-func New(s catalog.Searcher, sg catalog.Suggester, log *slog.Logger) http.Handler {
-	h := &handler{searcher: s, suggester: sg, log: log}
+// New returns the HTTP handler of the API: GET /search, GET /suggest,
+// GET /products/{id} and GET /healthz. HEAD also matches each of them. Other
+// paths and methods get the mux's plain 404 and 405.
+func New(s catalog.Searcher, sg catalog.Suggester, g catalog.Getter, hc catalog.HealthChecker, log *slog.Logger) http.Handler {
+	h := &handler{searcher: s, suggester: sg, getter: g, health: hc, log: log}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /search", h.search)
 	mux.HandleFunc("GET /suggest", h.suggest)
+	mux.HandleFunc("GET /products/{id}", h.product)
+	mux.HandleFunc("GET /healthz", h.healthz)
 	return mux
 }
 
@@ -107,9 +113,14 @@ func (h *handler) search(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]productItem, len(res.Products))
 	for i, p := range res.Products {
-		items[i] = productItem{ID: p.ID, Name: p.Name, Brands: nonNil(p.Brands), Categories: nonNil(p.Categories), Nutriscore: p.Nutriscore}
+		items[i] = itemOf(p)
 	}
 	h.writeJSON(w, http.StatusOK, searchResponse{Total: res.Total, Page: q.Page, Size: q.Size, Items: items, Facets: facetsOf(res.Facets)})
+}
+
+// itemOf is the one builder of the product object shared by /search and /products/{id}.
+func itemOf(p catalog.Product) productItem {
+	return productItem{ID: p.ID, Name: p.Name, Brands: nonNil(p.Brands), Categories: nonNil(p.Categories), Nutriscore: p.Nutriscore}
 }
 
 func facetsOf(f catalog.Facets) facetsBody {

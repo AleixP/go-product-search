@@ -473,8 +473,8 @@ func TestIntegration(t *testing.T) {
 	base := "http://" + proc.waitAddr(t)
 	client := &http.Client{Timeout: clientBound, Transport: &http.Transport{DisableKeepAlives: true}}
 
-	t.Run("before ingest search and suggest are 503", func(t *testing.T) {
-		for _, path := range []string{"/search?q=milk", "/suggest?q=mi"} {
+	t.Run("before ingest search, suggest, product and healthz are 503", func(t *testing.T) {
+		for _, path := range []string{"/search?q=milk", "/suggest?q=mi", "/healthz", "/products/9991000000001"} {
 			wantJSONReply(t, do(t, client, http.MethodGet, base+path), http.StatusServiceUnavailable, unavailableJSON)
 		}
 	})
@@ -486,4 +486,5 @@ func TestIntegration(t *testing.T) {
 	searchIntegrationSubtests(t, client, base)
 	facetsIntegrationSubtests(t, client, base)
 	suggestIntegrationSubtests(t, client, base)
+	productIntegrationSubtests(t, client, base)
 }

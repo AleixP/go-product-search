@@ -6,6 +6,7 @@ import "net/http"
 const (
 	codeInvalidParameter = "invalid_parameter"
 	codePageOutOfRange   = "page_out_of_range"
+	codeNotFound         = "not_found"
 	codeSearchUnavail    = "search_unavailable"
 	codeInternal         = "internal_error"
 )
@@ -32,4 +33,12 @@ func searchUnavailable() *apiError {
 
 func internalError() *apiError {
 	return &apiError{status: http.StatusInternalServerError, code: codeInternal, message: "internal error"}
+}
+
+func notFound() *apiError {
+	return &apiError{status: http.StatusNotFound, code: codeNotFound, message: "product not found"}
+}
+
+func noParameters() *apiError {
+	return invalidParameter("unknown parameter; this endpoint accepts no parameters")
 }

@@ -36,10 +36,12 @@ var shutdownTimeout = 10 * time.Second
 // listen opens the listening socket; a variable so tests can inject failures.
 var listen = net.Listen
 
-// backend is what the API needs from the search engine: search and suggest.
+// backend is what the API needs from the search engine: search, suggest, get by id and health check.
 type backend interface {
 	catalog.Searcher
 	catalog.Suggester
+	catalog.Getter
+	catalog.HealthChecker
 }
 
 // openSearcher connects to OpenSearch and returns it as a backend.
@@ -138,7 +140,7 @@ func run(ctx context.Context, args []string, stderr io.Writer,
 	if bindsAllInterfaces(ln.Addr()) {
 		log.Warn("listening on all interfaces; the API has no authentication", "addr", ln.Addr().String())
 	}
-	srv := newServer(httpapi.New(s, s, log), log)
+	srv := newServer(httpapi.New(s, s, s, s, log), log)
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(ln) }()
 	log.Info("listening", "addr", ln.Addr().String()) // contract: read by the e2e test

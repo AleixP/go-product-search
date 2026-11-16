@@ -1,5 +1,6 @@
 // Package opensearch is the OpenSearch adapter of the catalog.Indexer,
-// catalog.Searcher and catalog.Suggester ports.
+// catalog.Searcher, catalog.Suggester, catalog.Getter and catalog.HealthChecker
+// ports.
 package opensearch
 
 import (
