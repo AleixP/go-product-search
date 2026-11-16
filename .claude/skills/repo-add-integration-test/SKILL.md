@@ -25,9 +25,9 @@ One run of `TestIntegration` (`tests/e2e/integration_test.go`), in this order:
 3. `startOpenSearch`: `dockerProblem` probe (bounded by `dockerProbeWait`), then `opensearch.Run` with image `integrationImage` (`opensearchproject/opensearch:2.19.7`, equal to docker-compose.yml, pinned by `TestIntegrationImage_MatchesDockerCompose`), env `OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m`, and ports 9200 and 9600 published on `127.0.0.1` with random host ports. It inspects the container and fails unless the env and the loopback bindings are as expected. `testcontainers.CleanupContainer` is called right after `Run`, before the error check; `checkContainerGone` runs after it and fails the test if the container still exists.
 4. `freshClusterError` (the guard): refuses an invalid URL and port 9200 before any request; requires `GET /_alias/products` = 404 and `GET /_cat/indices/products-*?format=json` = `[]`. No redirects, body capped at 1 MiB, errors never quote a response body.
 5. `buildAPI` and `buildIngest` build the real binaries into `t.TempDir()`. `startGuarded` starts `api` with `--addr 127.0.0.1:0 --opensearch <addr>`; `waitAddr` reads its listening line.
-6. Subtest "before ingest search and suggest are 503": `/search?q=milk` and `/suggest?q=mi` give exactly `unavailableJSON` (the alias does not exist yet).
+6. Subtest "before ingest search, suggest, product and healthz are 503": `/search?q=milk`, `/suggest?q=mi`, `/healthz` and `/products/9991000000001` give exactly `unavailableJSON` (the alias does not exist yet). This checks that, before the alias exists, `/healthz` and a document GET answer 503 `search_unavailable` (never 200, never 404 `not_found`). The engine's own statuses (`HEAD /_alias/products` 404; document GET on a missing alias 404 `index_not_found_exception`) were observed by hand on OpenSearch 2.19.7 and are not asserted by the test.
 7. `ingestIntegration` runs the real `ingest` (through `runIngestGuarded`) with `--input <abs fixture> --opensearch <addr> --sample-every 1 --limit 0`, and checks the report against literals. If it fails, the rest is skipped (it returns false).
-8. Sequential subtests on that one container, in this order: `integrationDataSubtests` (`integration_ingest_test.go`), `searchIntegrationSubtests` (`integration_search_test.go`), `facetsIntegrationSubtests` (`integration_facets_test.go`), `suggestIntegrationSubtests` (`integration_suggest_test.go`).
+8. Sequential subtests on that one container, in this order: `integrationDataSubtests` (`integration_ingest_test.go`), `searchIntegrationSubtests` (`integration_search_test.go`), `facetsIntegrationSubtests` (`integration_facets_test.go`), `suggestIntegrationSubtests` (`integration_suggest_test.go`), `productIntegrationSubtests` (`integration_product_test.go`).
 
 Both child processes run through `guardedScript`: the test process holds the write end of the child's stdin pipe, so when the test dies for any reason (including a `-test.timeout` panic or SIGKILL, where no `t.Cleanup` runs) the pipe closes and the wrapper sends SIGINT, then SIGKILL after `stopGrace` seconds. Do not start `api` or `ingest` with a plain `exec.Command` in this test.
 
@@ -41,6 +41,7 @@ Files (all in package `e2e`, `tests/e2e/`):
 | `integration_search_test.go` | `searchCases`, `wantFacets`, `docIDs`, `searchIntegrationSubtests` |
 | `integration_facets_test.go` | `facetCases`, `roundTrip`, `facetsIntegrationSubtests` |
 | `integration_suggest_test.go` | `suggestCases`, `suggestGroup`, `getSuggest`, `suggestIntegrationSubtests` |
+| `integration_product_test.go` | `wantCremeFraiche`, `productIntegrationSubtests` (`/healthz` and `/products/{id}`) |
 | `integration_proc_test.go` | `guardedScript`, `startGuarded`, `notifyInterrupt`, `checkContainerGone`, `probeDocker` |
 | `integration_probe_test.go`, `integration_ingest_unit_test.go`, `integration_proc_unit_test.go`, `integration_ingest_proc_test.go` | tests of the helpers above (no container); the last two run the test binary as a helper process |
 
@@ -48,11 +49,11 @@ Files (all in package `e2e`, `tests/e2e/`):
 
 ## 3. How to add a case
 
-Pick the file by kind: text search in `integration_search_test.go`, filters and facets in `integration_facets_test.go`, suggest in `integration_suggest_test.go`.
+Pick the file by kind: text search in `integration_search_test.go`, filters and facets in `integration_facets_test.go`, suggest in `integration_suggest_test.go`, product and health cases (`/products/{id}`, `/healthz`) in `integration_product_test.go`.
 
 - Table row: a `searchCase{name, q, ids, why}`, a `facetCase{name, query, ids, brands, categories, grades}` (queries built with `vals(...)`, which sets `size=100`), or a `suggestCase{name, q, want}`.
 - Ids are the last three digits of the fixture code (`9991000000NNN`); `docIDs` expands them.
-- A new kind of check is a new function `func xIntegrationSubtests(t *testing.T, client *http.Client, base string)` in a new file, plus one call at the end of `TestIntegration`, after `suggestIntegrationSubtests`. Use `getSearch(t, client, base, query)` or `getSuggest(...)`, never raw `client.Get`.
+- A new kind of check is a new function `func xIntegrationSubtests(t *testing.T, client *http.Client, base string)` in a new file, plus one call at the end of `TestIntegration`, after `productIntegrationSubtests`. Use `getSearch(t, client, base, query)` or `getSuggest(...)`, never raw `client.Get`.
 - Expectations are literals derived by hand from `testdata/integration.tsv` and the engine rules (analyzers in `internal/opensearch/mapping.json`, query in `internal/opensearch/search/`). Never compute an expected value with the code under test, and never copy a value from a first run: derive it, write it, see it fail or pass for the right reason. Put the derivation in a comment or in `why`.
 - Order policy: hits are compared as a set of ids plus the total; order is never asserted for hits or suggestions. Facet lists are compared exactly and in order: `wantFacets` compares the three lists (brands, categories, nutriscore), and the order (count descending, then key ascending, top 10, then selected values missing from it with their real count, for example `zenith bakery` with 1) is produced by `termsFacetValues` in `internal/opensearch/search/facets.go`. A selected value gets count 0 when it matches nothing under the other active constraints. Suggestions are sets of groups (`checkGroups`, `checkSubset`): a suggestion matches a group when its text is any of the raw spellings that fold to one key.
 - Facet values are folded keys. A selected value outside the top 10 is listed after the top 10 with its count.
