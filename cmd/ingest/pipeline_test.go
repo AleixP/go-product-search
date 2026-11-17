@@ -225,9 +225,17 @@ func TestPipeline_BulkErrorIsFatalStopsReadingAndKeepsTheCounts(t *testing.T) {
 	plNoLeak(t)
 	boom := errors.New("boom")
 	ctxOfFailure := make(chan context.Context, 1)
+	inNext := make(chan struct{}) // closed once the producer is inside next for line 2000
 	idx := &plIndexer{hook: func(ctx context.Context, docs []catalog.Product) (catalog.BulkResult, error) {
 		if docs[0].ID == "c0001000" { // batch 2
 			ctxOfFailure <- ctx
+			// Fail only once the producer is inside next: otherwise, on a loaded
+			// machine, the cancel can land before its check and line 2000 is never read.
+			select {
+			case <-inNext:
+			case <-time.After(plWait):
+				t.Error("producer never reached line 2000")
+			}
 			// A result that comes with an error is not counted.
 			return catalog.BulkResult{Indexed: 999, Failed: 1, FailureTypes: map[string]int{"x": 1}, FailedIDs: []string{"z"}}, boom
 		}
@@ -241,6 +249,7 @@ func TestPipeline_BulkErrorIsFatalStopsReadingAndKeepsTheCounts(t *testing.T) {
 		if i != 2000 {
 			return
 		}
+		close(inNext)
 		select {
 		case ctx := <-ctxOfFailure:
 			select {
