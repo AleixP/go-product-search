@@ -1,5 +1,7 @@
 # go-product-search
 
+[![CI](https://github.com/AleixP/go-product-search/actions/workflows/ci.yml/badge.svg)](https://github.com/AleixP/go-product-search/actions/workflows/ci.yml)
+
 A product search service in Go on OpenSearch: full-text search, combinable
 filters, disjunctive facets and autocomplete over a public product catalogue.
 
@@ -415,9 +417,11 @@ Nothing is committed unless I ask. The agents use 17 skills under `.claude/skill
 (`agent-kit-ponytail`) from DietrichGebert/ponytail (both MIT), and 4 written for the kit (origin
 and notices in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)), plus 2 repo skills
 (`repo-add-filter`, `repo-add-integration-test`). Each ticket keeps a private proposal with the
-decisions and a rejection log, which this section summarises. QA ran mutation sweeps on the
-tests and measurements on a real OpenSearch. The agents wrote all of the code, tests,
-configuration, CI, this README and the `LICENSE`, plus the proposals and the measurements.
+decisions and a rejection log, which this section summarises. Those proposals and logs are not
+published, so the counts below are my own tally and can't be checked from this repo. QA ran
+mutation sweeps on the tests and measurements on a real OpenSearch. The agents wrote all of the
+code, tests, configuration, CI, this README and the `LICENSE`, plus the proposals and the
+measurements.
 
 ### What I did
 
@@ -434,18 +438,18 @@ example, in the logs of T-2 to T-7:
 
 ### Where they got it wrong
 
-`REJECTED` log lines, T-2 to T-7 (T-1 has no log, T-8 is open): T-2 2, T-3 19, T-4 7, T-5 7, T-6 4,
-T-7 9, in total 48; end-to-end rejections 0. A line can cover several rejections, and some T-4
+`REJECTED` log lines, T-2 to T-7 (T-1 has no log; T-8 onwards are not counted): T-2 2, T-3 19, T-4 7,
+T-5 7, T-6 4, T-7 9, in total 48; end-to-end rejections 0. A line can cover several rejections, and some T-4
 approvals were not logged. Every `REJECTED` line is a `qa-validator` verdict (`CLAUDE.md`, work
 loop step 4), and a measurement with the real adapter caught what a fake-based probe
-under-counted (T-3 Log 179). The kinds, with one example each:
+under-counted (T-3). The kinds, with one example each:
 
 - Untested branches: 16 mutants of the index adapter survived (T-3).
 - Memory over budget (a 17 MiB line peaked at 85.4 MB against 64 MB) and a sampler that kept 60
   of 187,984 valid rows on real data (T-3).
 - A cleanup path that could delete the live index after an ambiguous alias swap, and error
   messages that leaked the server address path (T-3).
-- Tests that hang instead of failing on a shutdown regression (T-4 Log 249-250).
+- Tests that hang instead of failing on a shutdown regression (T-4).
 - 503s under load from the default HTTP transport (T-4) and 429s from the analyze queue (T-5).
 - False statements in a skill, untraceable figures in the notes (T-5, T-7), and wrong
   coordinator instructions such as asking for "6 runs" of figures that had 3 (T-7).
