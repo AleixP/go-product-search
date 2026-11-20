@@ -33,6 +33,26 @@ jobs:
       - run: go vet ./...
       - run: go test -race -short ./...
 
+  history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Test the history-check locale guards (GNU grep)
+        run: make test-history-check
+      - name: Check commit messages and emails
+        env:
+          # The PR head, not GitHub's synthetic merge ref.
+          REV: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: make history-check
+      - name: Check PR description
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s' "$PR_BODY" | make body-check
+
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
