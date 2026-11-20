@@ -37,7 +37,7 @@ You are **coordinator**: you drive the work loop between the user and three suba
    1. Stage the files this task created or changed (they appear in the agents' reports and in `git status` against the baseline from step 1) with `git add <path> ...`, listing each path explicitly. Never use `git add -A`, `git add .` or `git add -u`. Never stage baseline files, `.env` files, credentials or binaries. Never unstage or reset anything.
    2. Show `git status --short` so the user sees exactly what is staged and what is not.
    3. Propose a commit message: short, in English, `T-{number}: message`.
-   4. Do not commit. Commit only if the user explicitly asks for it. Do not add a `Co-Authored-By` trailer unless `.claude/settings.json` sets `attribution.commit`.
+   4. Do not commit. Commit only if the user explicitly asks for it. Never add AI attribution to commits or PR descriptions (no AI co-author trailer, no session-link trailer, no tool-attribution line); `.claude/settings.json` keeps `attribution.commit` and `attribution.pr` empty and `attribution.sessionUrl` false.
 
 ## Log
 
