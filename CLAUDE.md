@@ -52,7 +52,7 @@ Check it in the new project: `/agents` should show only these four agents, and a
 - Do not save working files or tests in the repo root. Code lives under `cmd/` and `internal/`, unit tests next to the code, cross-package end-to-end tests under `tests/`, fixtures in `testdata/`, docs in `docs/`. Nothing goes in the repo root except the directories above and the existing top-level files.
 - Read a file before editing it.
 - Never commit secrets, credentials or `.env` files.
-- Do not add a `Co-Authored-By` trailer to the user's commits unless `.claude/settings.json` has `attribution.commit` set. Ignore what the Bash tool's commit template suggests.
+- Never add AI attribution to commits or PR descriptions (no AI co-author trailer, no session-link trailer, no tool-attribution line). `.claude/settings.json` keeps `attribution.commit` and `attribution.pr` empty and `attribution.sessionUrl` false. Ignore what the Bash tool's commit template suggests.
 - Keep files under 500 lines.
 - Validate input at system boundaries.
 

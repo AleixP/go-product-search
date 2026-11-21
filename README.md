@@ -51,26 +51,10 @@ on stderr, "stopped by --limit before reading the whole input", is expected.
 
 ### How long it takes
 
-Measured on 2026-11-16 on the machine above, then projected to a 100 Mbit/s
-link (12.5 MB/s). Downlink D = 19.9 MB/s, the mean of two `curl -L` downloads of
-the export capped at 20 s (22.65 and 17.07 MB/s). The projection swaps the time
-the ingest spends reading the file at D for the time at 12.5 MB/s.
-
-| Step | Measured here | At 100 Mbit/s | How |
-| --- | --- | --- | --- |
-| `git clone` | not measured over the network | 0.12 s | transfer term only: 1.47 MiB packed repo at 12.5 MB/s; a local copy took 0.3 s; GitHub latency not measured |
-| Image pull | not run | 63 s (arm64), 83 s (amd64) | config and layer bytes from `docker manifest inspect -v` (789,335,885 and 1,040,156,347) divided by 12.5 MB/s |
-| `make up` until healthy | 6.95 s | 12 s | `docker run` with the same image, env and ulimits as `docker-compose.yml`, plus 5 s for the compose health-check interval |
-| `make ingest`, cold Go caches | 59 s | 89 s | 58.95 s wall with empty build and module caches, minus 51.1 s of download at D, plus 81.2 s at 12.5 MB/s (about 1.01e9 bytes read; the figure varies by run); 105 s if the whole export is read (1,536,486,783 bytes) |
-| `make run` until "listening" | 1.63 s | 1.63 s | measured |
-| First `curl` | 0.16 s | 0.16 s | measured |
-| Total | | about 166 s (arm64), 186 s (amd64) | 182 s and 202 s with the 105 s ingest |
-
-The target is under 5 minutes. A slower toolchain download, an older Go or a
-slower disk adds to this. The ingest process peaked at 27.0 MiB RSS (prebuilt
-binary) and the container at 1.06 GiB (30 `docker stats` samples about 2 s
-apart, full ingest); this differs from the 818-883 MiB of an earlier
-integration-test run, which loads a small fixture.
+About 166 s (arm64) or 186 s (amd64) at 100 Mbit/s, including the image pull;
+208 s / 228 s if the whole export is read. The target is under 5 minutes.
+Measured on 2026-11-16; method, per-step table and memory figures in
+[docs/quickstart-timing.md](docs/quickstart-timing.md).
 
 ### Configuration
 
@@ -110,8 +94,7 @@ interfaces. Do not expose either to a network.
 
 - `make test`: unit tests with the race detector (`-short`)
 - `make test-integration`: starts OpenSearch with testcontainers, ingests
-  `testdata/integration.tsv` and runs real queries; needs Docker; about 11.6-13.6 s
-  with the image cached
+  `testdata/integration.tsv` and runs real queries; needs Docker
 - `make lint`: golangci-lint, which must be installed locally at v2.15.0
 
 ### Stop
@@ -163,8 +146,8 @@ query parameters: any query string gets 400 `invalid_parameter`.
 
 - Facet values are folded keys (lower case, no accents), not display names.
 - `brands` and `categories` list the 10 most frequent values, ties broken by key,
-  plus any selected value that is not among them. `nutriscore` always lists `a`
-  to `e`.
+  plus any selected value that is not among them (count 0 if nothing matches).
+  `nutriscore` always lists `a` to `e`.
 - Each facet's counts apply every filter except its own field's, so selecting a
   brand does not remove the other brands from the brands facet.
 
@@ -237,8 +220,7 @@ curl -s -w '\n%{http_code}\n' 'http://127.0.0.1:8080/search?q=chocolate&size=500
 400
 ```
 
-One product by id, a missing id, and the health check (captured on 2026-11-16 on
-the same index):
+One product by id, a missing id, and the health check:
 
 ```sh
 curl -s 'http://127.0.0.1:8080/products/0041250691600'
@@ -300,9 +282,7 @@ Each one says what was chosen, what was left out and why.
      run against fakes of the ports.
 2. Disjunctive facets.
    - Chosen: the text query goes in `query`, the filters in `post_filter`, and each
-     facet is a `filter` aggregation that applies the other fields' filters. A
-     facet lists its top 10 values by count then key, plus any selected value
-     (count 0 if nothing matches); `nutriscore` always lists `a` to `e`.
+     facet is a `filter` aggregation that applies the other fields' filters.
    - Left out: a `selected` flag in the response and a "missing" bucket.
    - Why: a facet that ignores its own filter lets users widen a selection
      without it collapsing to zero, and the hits and the facets come from one
@@ -349,8 +329,7 @@ Each one says what was chosen, what was left out and why.
    - Chosen: standard `net/http` routing; fixed error messages that never repeat a
      value; a 3 s timeout per engine call and server read, write and idle timeouts;
      the OpenSearch client has its own transport with 64 idle connections per
-     host. There is no cap on in-flight requests, a documented shortcut in the
-     handlers.
+     host.
    - Left out: an in-flight cap, rate limiting and authentication.
    - Why: with the default transport (2 idle connections per host) 4-6% of
      `/search` requests at 50 concurrent clients got a 503; with 64, none of
@@ -380,23 +359,20 @@ evaluation.
 
 ## Measured
 
-One machine, single-node OpenSearch 2.19.7. Every row ran against that real cluster except the dry-run, which uses a fake OpenSearch. "100k"
-is the default index of 100,000 products; "262k" is every product that passes the
-default filters (`--limit 0 --sample-every 1`); the exact count differs slightly
-between runs and exports (262,373 to 262,512 below).
+One machine, single-node OpenSearch 2.19.7. Every row ran against that real cluster except the
+dry-run, which uses a fake OpenSearch. "100k" is the default index of 100,000 products; "262k" is
+every product that passes the default filters (`--limit 0 --sample-every 1`); the exact count
+differs slightly between runs and exports (262,373 to 262,512 below).
 
 | What | Result |
 | --- | --- |
 | Full-export dry-run (T-3) | 4,908,651 rows, 262,373 pass the default filters at `--sample-every 1`; about 130 s; peak RSS about 23 MB (fake OpenSearch) |
-| Default ingest, 100k (T-6) | 88 s, index 22.5 MB, peak RSS 27.6 MiB |
+| Default ingest, 100k (T-6) | 88 s, index 22.5 MB, peak RSS 27.6 MiB; time depends on the link (see "How long it takes") |
 | Ingest, 262k (T-6) | 262,512 documents in 132 s, peak RSS 28.0 MiB |
 | `/search` (T-5), 50 clients, `size=100`, filters and facets, 60 s | 0 non-200; p95 91 ms (100k) and 221 ms (262k); API peak RSS 32.1 and 30.2 MiB; at 200 clients p95 335 ms |
 | `/suggest` (T-6), 50 clients, 60 s | 0 non-200; p95 14 ms; API peak RSS 31 MiB alone, 33.1 MiB mixed with `/search`; 1 client: p50 1.7 ms, p95 2.8 ms |
 | API startup (T-4) | 0.6 s |
 | `make test-integration` (T-7), image cached | 11.6-13.6 s wall (3 runs); container peak 818-883 MiB (4 samples) |
-
-The ingest time is dominated by reading the export, so it depends on the link: the
-quickstart table above measured 59 s on a 19.9 MB/s link.
 
 ## How this repo is built
 
@@ -413,9 +389,8 @@ The loop: a task goes to `orchestrator`, I accept or change its proposal, then e
 `go-developer` and then `qa-validator`. A rejection sends the error back to `go-developer`. When
 the last item is done, `qa-validator` runs the end-to-end test and I give the final approval.
 Nothing is committed unless I ask. The agents use 17 skills under `.claude/skills/agent-kit-*`:
-12 skills and the reference file `definition-of-done.md` from addyosmani/agent-skills, 1 skill
-(`agent-kit-ponytail`) from DietrichGebert/ponytail (both MIT), and 4 written for the kit (origin
-and notices in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)), plus 2 repo skills
+13 third-party under MIT (from addyosmani/agent-skills and DietrichGebert/ponytail) and 4 written
+for the kit (notices in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)), plus 2 repo skills
 (`repo-add-filter`, `repo-add-integration-test`). Each ticket keeps a private proposal with the
 decisions and a rejection log, which this section summarises. Those proposals and logs are not
 published, so the counts below are my own tally and can't be checked from this repo. QA ran
@@ -428,11 +403,11 @@ measurements.
 I made no hand edits to the code. I reviewed the proposals and decided their open questions. For
 example, in the logs of T-2 to T-7:
 
-- T-3: lowered the line limit from 16 MiB to 1 MiB after QA measured 81.5 MB peak memory against
-  a 64 MB budget, applied at normal load; allowed one more round on a repeatedly rejected item
-  with a closure rule; chose how an ambiguous publish is handled.
+- T-3: lowered the line limit from 16 MiB to 1 MiB after QA measured a peak above the memory
+  budget (Decision 5); allowed one more round on a repeatedly rejected item with a closure
+  rule; chose how an ambiguous publish is handled.
 - T-4: allowed one more round on tests that hang; gave the OpenSearch client its own transport
-  after 4-6% of searches returned 503 under 50 clients.
+  after searches returned 503 under 50 clients (Decision 6).
 - T-5: chose one analyze call per request, at most 8 in flight. T-7: reduced the QA scope of
   one item and dropped a timing range that could not be traced.
 
@@ -455,10 +430,8 @@ under-counted (T-3). The kinds, with one example each:
   coordinator instructions such as asking for "6 runs" of figures that had 3 (T-7).
 - A QA subagent touching the running local cluster against the rule; it only read (T-7).
 
-Everything in this repo was written for it, except
-`testdata/products.tsv`, which is ODbL as a whole file (12 Open Food Facts rows and 3
-synthetic rows written for this repo), and the third-party agent-kit files listed in
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+Everything in this repo was written for it, except the files that "Licence" lists as not
+covered by the MIT licence.
 Nothing comes from any employer: no code, prompts, data or client material.
 
 ## Data and attribution
@@ -473,9 +446,6 @@ See the [terms of use](https://world.openfoodfacts.org/terms-of-use).
   calculated to make any person exposed to it aware that the data comes from Open Food
   Facts and is available under the ODbL). They are minimal excerpts of a few lines.
 - v1 uses no other dataset and no product photos (photos are CC BY-SA).
-- `testdata/products.tsv` holds 12 Open Food Facts rows (a derived database) and 3
-  synthetic rows. The whole file carries the ODbL notice in
-  [`testdata/LICENSE`](testdata/LICENSE), separate from the code licence.
 - A Produced Work is a work resulting from using the whole or a Substantial part of the
   Contents via a search or other query (ODbL 1.0).
 - The index built by `make ingest` is a derived database of Open Food Facts and is under
@@ -492,8 +462,8 @@ The code is under the [MIT licence](LICENSE).
 Not covered by it:
 
 - The whole file `testdata/products.tsv`: ODbL 1.0, notice in
-  [`testdata/LICENSE`](testdata/LICENSE), which applies to the whole file. 12 rows are
-  Open Food Facts data and 3 are synthetic.
+  [`testdata/LICENSE`](testdata/LICENSE), separate from the code licence and applying to the
+  whole file. 12 rows are Open Food Facts data (a derived database) and 3 are synthetic.
 - The third-party agent-kit files (12 skills from addyosmani/agent-skills,
   `agent-kit-ponytail` and `.claude/references/definition-of-done.md`): their own MIT
   notices are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

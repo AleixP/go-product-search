@@ -10,5 +10,10 @@
   },
   "env": {
     "CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS": "1"
+  },
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
   }
 }
